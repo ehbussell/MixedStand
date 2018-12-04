@@ -1,0 +1,10 @@
+max_iter 500
+print_level 5
+acceptable_tol 1.0e-6
+tol 1.0e-8
+mu_strategy adaptive
+output_file result.out
+required_infeasibility_reduction 0.25
+check_derivatives_for_naninf yes
+bound_relax_factor 0.0
+#obj_scaling_factor 100
