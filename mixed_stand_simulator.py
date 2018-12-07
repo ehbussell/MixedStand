@@ -360,41 +360,33 @@ class MixedStandSimulator:
 
         if control_func is not None:
             control = control_func(time) * self.params.get('control_rate', 0.0)
-            # control[3] = np.minimum(control[3], 10000000*(state[12] > 0))
-            # control[4] = np.minimum(control[4], 10000000*(state[14] > 0))
+
+            # bay_tot = np.sum(state[12::15]) + np.sum(state[13::15])
+            # if bay_tot > 0.0:
+            #     control[3] = control[3] / bay_tot
+            # else:
+            #     control[3] = 0.0
+
+            # control[4] = np.minimum(control[4], 1000000000*(np.sum(state[14::15]) > 0))
 
             roguing = np.tile(
                 np.array([control[0], control[0], control[1], control[1], control[2]]), self.ncells)
             
-            protection = np.tile(np.repeat(control[5:], 2), self.ncells)
+            protection = np.tile(
+                np.array([control[5], control[5], control[6], control[6]]), self.ncells)
 
             # Roguing
             d_state[1 + self._indices['inf_s_idx']] -= roguing * state[1 + self._indices['inf_s_idx']]
-            # d_state[1::15] -= control[0] * state[1::15]
-            # d_state[4::15] -= control[0] * state[4::15]
-            # d_state[7::15] -= control[1] * state[7::15]
-            # d_state[10::15] -= control[1] * state[10::15]
-            # d_state[13::15] -= control[2] * state[13::15]
 
             # Thinning
-            # bay_tots = np.sum(state[12::15])
-            # red_tots = np.sum(state[14::15])
-            # d_state[12::15] -= np.divide(control[3] * state[12::15], bay_tots,
-            #                              out=np.zeros_like(state[12::15]), where=(bay_tots > 0))
-            # d_state[14::15] -= np.divide(control[4] * state[14::15], red_tots,
-            #                              out=np.zeros_like(state[12::15]), where=(red_tots > 0))
+            d_state[12::15] -= control[3] * state[12::15]
+            d_state[13::15] -= control[3] * state[13::15]
+            d_state[14::15] -= control[4] * state[14::15]
 
             # Phosphonite protectant
             d_state[self._indices['tan_s_idx']] -= protection * state[self._indices['tan_s_idx']]
             d_state[self._indices['tan_s_idx'] + 2] += protection * state[self._indices['tan_s_idx']]
-            # d_state[0::15] -= control[5] * state[0::15]
-            # d_state[2::15] += control[5] * state[0::15]
-            # d_state[3::15] -= control[5] * state[3::15]
-            # d_state[5::15] += control[5] * state[3::15]
-            # d_state[6::15] -= control[6] * state[6::15]
-            # d_state[8::15] += control[6] * state[6::15]
-            # d_state[9::15] -= control[6] * state[9::15]
-            # d_state[11::15] += control[6] * state[9::15]
+
         else:
             control = np.zeros(7)
 

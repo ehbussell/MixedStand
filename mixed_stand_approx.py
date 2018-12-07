@@ -49,6 +49,8 @@ class MixedStandApprox:
     and parameter object. Some parameters will be taken from Cobb model, others require fitting.
     """
 
+    # TODO add initialisation function
+
     def __init__(self, setup, params, fit):
         required_keys = ['state_init', 'times']
 
@@ -56,17 +58,13 @@ class MixedStandApprox:
             if key not in setup:
                 raise KeyError("Setup Parameter {0} not found!".format(key))
 
-        self.setup = {k: setup[k] for k in required_keys}
+        self.setup = {'times': setup['times']}
 
         for key in setup:
             if key not in required_keys:
                 warnings.warn("Unused setup parameter: {0}".format(key))
 
-        if len(self.setup['state_init']) != 15:
-            ncells = len(self.setup['state_init']) / 15
-
-            self.setup['state_init'] = np.sum(
-                np.reshape(self.setup['state_init'], (int(ncells), 15)), axis=0) / ncells
+        self.set_state_init(setup['state_init'])
 
         self.params = copy.deepcopy(params)
 
@@ -127,6 +125,18 @@ class MixedStandApprox:
         """Print message from class with class identifier."""
         identifier = "[" + self.__class__.__name__ + "]"
         print("{0:<20}{1}".format(identifier, msg))
+    
+    def set_state_init(self, state_init):
+        """Set the initial state for future runs."""
+
+        if len(state_init) != 15:
+            ncells = len(state_init) / 15
+
+            self.setup['state_init'] = np.sum(
+                np.reshape(state_init, (int(ncells), 15)), axis=0) / ncells
+        
+        else:
+            self.setup['state_init'] = state_init
 
     def _objective_integrand(self, time, state, control):
         """Integrand of objective function, including control costs and diversity costs."""
@@ -134,7 +144,7 @@ class MixedStandApprox:
         props = np.divide(np.array([np.sum(state[0:6]), np.sum(state[6:12]),
                                     state[12] + state[13], state[14]]),
                           np.sum(state[0:15]), out=np.zeros(4), where=(np.sum(state[0:15]) > 0.0))
-        div_cost = np.sum(props * np.log(props, out=np.zeros_like(props), where=(props>0.0)))
+        div_cost = np.sum(props * np.log(props, out=np.zeros_like(props), where=(props > 0.0)))
 
         integrand = np.exp(- self.params.get('discount_rate', 0.0) * time) * (
             self.params.get('cull_cost', 0.0) * self.params.get('control_rate', 0.0) * (
@@ -146,14 +156,14 @@ class MixedStandApprox:
         )
 
         return integrand
-    
+
     def _terminal_cost(self, state):
         """Payoff term in objective function"""
 
         payoff = - self.params.get('payoff_factor', 0.0) * np.exp(
             - self.params.get('discount_rate', 0.0) * self.setup['times'][-1]) * (
-            state[6] + state[8] + state[9] + state[11])
-        
+                state[6] + state[8] + state[9] + state[11])
+
         return payoff
 
     def state_deriv(self, time, state, control_func=None):
@@ -227,8 +237,8 @@ class MixedStandApprox:
 
         if control_func is not None:
             control = control_func(time) * self.params.get('control_rate', 0.0)
-            control[3] = np.minimum(control[3], 10000000*(state[12] > 0))
-            control[4] = np.minimum(control[4], 10000000*(state[14] > 0))
+            # control[3] = np.minimum(control[3], 10000000*(state[12] > 0))
+            # control[4] = np.minimum(control[4], 10000000*(state[14] > 0))
 
             # Roguing
             d_state[1] -= control[0] * state[1]
@@ -238,8 +248,9 @@ class MixedStandApprox:
             d_state[13] -= control[2] * state[13]
 
             # Thinning
-            d_state[12] -= control[3]
-            d_state[14] -= control[4]
+            d_state[12] -= control[3] * state[12]
+            d_state[13] -= control[3] * state[13]
+            d_state[14] -= control[4] * state[14]
 
             # Phosphonite protectant
             d_state[0] -= control[5] * state[0]
@@ -308,57 +319,32 @@ class MixedStandApprox:
 
         return X, self.run_objective
 
-    # def plot(self, ax=None, proportions=True):
-    #     """Plot state as a function of time."""
+    def optimise(self, bocop_dir=None, verbose=True, init_policy=None):
+        """Run BOCOP optimisation of control."""
 
-    #     if self.run_data is None:
-    #         raise RuntimeError("No run has been simulated!")
+        if bocop_dir is None:
+            bocop_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), "BOCOP")
 
-    #     if ax is None:
-    #         fig = plt.figure(111)
-    #         ax = fig.add_subplot(111)
+        if init_policy is None:
+            initialisation, _ = self.run_policy(None)
+        else:
+            initialisation, _ = self.run_policy(init_policy, n_fixed_steps=999)
+        
+        self._set_bocop_params(init=initialisation, folder=bocop_dir)
 
-    #     model_run = self.run_data
-    #     times = self.setup['times']
+        if verbose is True:
+            subprocess.run([os.path.join(bocop_dir, "bocop.exe")], cwd=bocop_dir)
+        else:
+            subprocess.run([os.path.join(bocop_dir, "bocop.exe")],
+                           cwd=bocop_dir, stdout=subprocess.DEVNULL,
+                           stderr=subprocess.DEVNULL)
 
-    #     if proportions:
-    #         host_totals = np.sum(model_run, axis=0)
-    #     else:
-    #         host_totals = 1.0
+        state_t, _, control_t, exit_text = bocop_utils.readSolFile(
+            os.path.join(bocop_dir, "problem.sol"), ignore_fail=True)
+        
+        actual_states = np.array([state_t(t) for t in self.setup['times']]).T
 
-    #     small_tanoak_sus = np.sum(model_run[[0, 3], :], axis=0) / host_totals
-    #     large_tanoak_sus = np.sum(model_run[[6, 9], :], axis=0) / host_totals
-    #     small_tanoak_inf = np.sum(model_run[[1, 4], :], axis=0) / host_totals
-    #     large_tanoak_inf = np.sum(model_run[[7, 10], :], axis=0) / host_totals
-
-    #     bay_sus = model_run[12, :] / host_totals
-    #     bay_inf = model_run[13, :] / host_totals
-    #     redwood = model_run[14, :] / host_totals
-
-    #     ax.plot(times, small_tanoak_sus + small_tanoak_inf, 'k--', label="Small tanoak")
-    #     ax.plot(times, large_tanoak_sus + large_tanoak_inf, 'k-', label="Large tanoak")
-    #     ax.plot(times, bay_sus+bay_inf, 'b-', label="Bay")
-    #     ax.plot(times, bay_inf, 'b--', label="Bay I")
-    #     ax.plot(times, redwood, 'r-', label="Redwood")
-    #     ax.plot(times, small_tanoak_inf, 'r--', label="Small tanoak I", alpha=0.3)
-    #     ax.plot(times, large_tanoak_inf, 'r-', label="Large tanoak I", alpha=0.3)
-
-    #     return ax
-
-    # def plot_comparison(self, sim_animator, ax=None, proportions=True):
-    #     """Plot comparision with mixed stand simulation run."""
-
-    #     if self.run_data is None:
-    #         raise RuntimeError("No run has been simulated!")
-
-    #     if ax is None:
-    #         fig = plt.figure(111)
-    #         ax = fig.add_subplot(111)
-
-    #     sim_animator.plot(ax=ax, for_comparison=True, proportions=proportions)
-    #     self.plot(ax=ax, proportions=proportions)
-
-    #     return ax
+        return (actual_states, control_t, exit_text)
 
     def plot_hosts(self, ax=None, proportions=True, combine_ages=True, **kwargs):
         """Plot host numbers as a function of time."""
@@ -386,57 +372,7 @@ class MixedStandApprox:
         return visualisation.plot_dpcs(
             self.setup['times'], self.run_data, ax=ax, combine_ages=combine_ages, **kwargs)
 
-    def plot_control(self, control_policy, ax=None, labels=None, colors=None):
-        """Plot given control strategy."""
-
-        if ax is None:
-            fig = plt.figure(111)
-            ax = fig.add_subplot(111)
-
-        times = self.setup['times']
-
-        if labels is None:
-            labels = [
-                "Rogue Tan (Small)", "Rogue Tan (Large)", "Rogue Bay", "Thin Bay", "Thin Red",
-                "Protect Tan (Small)", "Protect Tan (Large)"
-            ]
-
-        if colors is None:
-            colors = [mpl.colors.to_rgba(col, alpha=alph) for col, alph in zip(
-                ["r", "r", "r", "b", "b", "purple", "purple"], [0.75, 0.5, 0.25, 0.6, 0.3, 0.6, 0.3]
-            )]
-        all_controls = np.array([control_policy(t) for t in times]).T
-
-        ax.stackplot(times, *all_controls, labels=labels, colors=colors)
-
-        return ax
-
-    def optimise(self, bocop_dir=None, verbose=True, init_policy=None):
-        """Run BOCOP optimisation of control."""
-
-        if bocop_dir is None:
-            bocop_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), "BOCOP")
-
-        if init_policy is None:
-            initialisation, _ = self.run_policy(None)
-        else:
-            initialisation, _ = self.run_policy(init_policy, n_fixed_steps=999)
-        
-        self.set_bocop_params(init=initialisation, folder=bocop_dir)
-
-        if verbose is True:
-            subprocess.run([os.path.join(bocop_dir, "bocop.exe")], cwd=bocop_dir)
-        else:
-            subprocess.run([os.path.join(bocop_dir, "bocop.exe")],
-                           cwd=bocop_dir, stdout=subprocess.DEVNULL,
-                           stderr=subprocess.DEVNULL)
-
-        state_t, _, control_t, exit_text = bocop_utils.readSolFile(
-            os.path.join(bocop_dir, "problem.sol"), ignore_fail=True)
-
-        return (state_t, control_t, exit_text)
-
-    def set_bocop_params(self, init=None, folder="BOCOP"):
+    def _set_bocop_params(self, init=None, folder="BOCOP"):
         """Save parameters and initial conditions to file for BOCOP optimisation."""
 
         with open(os.path.join(folder, "problem.bounds"), "r") as infile:
@@ -446,7 +382,7 @@ class MixedStandApprox:
         for i in range(15):
             all_lines[9+i] = str(self.setup['state_init'][i]) + " " + str(
                 self.setup['state_init'][i]) + " equal\n"
-        
+
         # When no integrated term in objective, set bounds on integrand to zero to aid convergence
         if (self.params.get('div_cost', 0.0) == 0.0 and
                 self.params.get('cull_cost', 0.0) == 0.0 and
@@ -604,7 +540,7 @@ class MixedStandFitter:
             approx_model.beta[i+1] *= approx_model.beta[0]
 
         if show_plot:
-            model_run = approx_model.run_policy(None)
+            model_run, objective = approx_model.run_policy(None)
             model_inf = model_run[1:14:3, :]
             fig = plt.figure()
             ax = fig.add_subplot(111)
@@ -678,7 +614,7 @@ class MixedStandFitter:
             for i, j in itertools.product(range(xx.shape[0]), range(xx.shape[1])):
                 approx_model.beta[param1] = xx[i, j]
                 approx_model.beta[param2] = yy[i, j]
-                model_run = approx_model.run_policy(None)
+                model_run, objective = approx_model.run_policy(None)
                 model_inf = model_run[1:14:3, :]
                 zz[i, j] = np.sum(np.square((inf_data - model_inf)))
 

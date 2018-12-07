@@ -73,16 +73,12 @@
 		pow(small / nhosts, small / nhosts) * pow(large / nhosts, large / nhosts) *
 		pow(bay / nhosts, bay / nhosts) * pow(red / nhosts, red / nhosts));
 	
-	Tdouble nhosts_unreg = 1.0;//state[0] + state[1] + state[2] + state[3] + state[4] + state[5] +
-						//    state[6] + state[7] + state[8] + state[9] + state[10] + state[11] +
-						//    state[12] + state[13] + state[14];
-
 	// Objective function
 	state_dynamics[15] = exp(- discount_rate * time) * (
 		cull_cost * control_rate * (
 			control[0] * (state[1] + state[4]) + control[1] * (state[7] + state[10]) +
 			control[2] * state[13] + control[3] * (state[12] + state[13]) +
-			control[4] * state[14]) / nhosts_unreg + 
+			control[4] * state[14]) + 
 		protect_cost * control_rate * (
 			control[5] * (state[0] + state[3]) + control[6] * (state[6] + state[9])) +
 		div_cost * diversity_costs
@@ -141,25 +137,25 @@
 
 	// CONTROL
 	// Roguing
-	state_dynamics[1] -= control[0] * control_rate * state[1] / nhosts_unreg;
-	state_dynamics[4] -= control[0] * control_rate * state[4] / nhosts_unreg;
-	state_dynamics[7] -= control[1] * control_rate * state[7] / nhosts_unreg;
-	state_dynamics[10] -= control[1] * control_rate * state[10] / nhosts_unreg;
-	state_dynamics[13] -= control[2] * control_rate * state[13] / nhosts_unreg;
+	state_dynamics[1] -= control[0] * control_rate * state[1];
+	state_dynamics[4] -= control[0] * control_rate * state[4];
+	state_dynamics[7] -= control[1] * control_rate * state[7];
+	state_dynamics[10] -= control[1] * control_rate * state[10];
+	state_dynamics[13] -= control[2] * control_rate * state[13];
 
 	// Thinning
-	state_dynamics[12] -= control[3] * control_rate * state[12] / nhosts_unreg;
-	state_dynamics[13] -= control[3] * control_rate * state[13] / nhosts_unreg;
-	state_dynamics[14] -= control[4] * control_rate * state[14] / nhosts_unreg;
+	state_dynamics[12] -= control[3] * control_rate * state[12];
+	state_dynamics[13] -= control[3] * control_rate * state[13];
+	state_dynamics[14] -= control[4] * control_rate * state[14];
 
 	// Phosphonite protectant
-	state_dynamics[0] -= control[5] * control_rate * state[0] / nhosts_unreg;
-	state_dynamics[2] += control[5] * control_rate * state[0] / nhosts_unreg;
-	state_dynamics[3] -= control[5] * control_rate * state[3] / nhosts_unreg;
-	state_dynamics[5] += control[5] * control_rate * state[3] / nhosts_unreg;
-	state_dynamics[6] -= control[6] * control_rate * state[6] / nhosts_unreg;
-	state_dynamics[8] += control[6] * control_rate * state[6] / nhosts_unreg;
-	state_dynamics[9] -= control[6] * control_rate * state[9] / nhosts_unreg;
-	state_dynamics[11] += control[6] * control_rate * state[9] / nhosts_unreg;
+	state_dynamics[0] -= control[5] * control_rate * state[0];
+	state_dynamics[2] += control[5] * control_rate * state[0];
+	state_dynamics[3] -= control[5] * control_rate * state[3];
+	state_dynamics[5] += control[5] * control_rate * state[3];
+	state_dynamics[6] -= control[6] * control_rate * state[6];
+	state_dynamics[8] += control[6] * control_rate * state[6];
+	state_dynamics[9] -= control[6] * control_rate * state[9];
+	state_dynamics[11] += control[6] * control_rate * state[9];
 
 }
