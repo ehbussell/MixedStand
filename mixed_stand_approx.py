@@ -15,6 +15,7 @@ import subprocess
 import itertools
 import os
 import warnings
+from scipy.interpolate import interp1d
 import numpy as np
 import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1 import make_axes_locatable
@@ -319,8 +320,11 @@ class MixedStandApprox:
 
         return X, self.run_objective
 
-    def optimise(self, bocop_dir=None, verbose=True, init_policy=None):
-        """Run BOCOP optimisation of control."""
+    def optimise(self, bocop_dir=None, verbose=True, init_policy=None, n_stages=None):
+        """Run BOCOP optimisation of control.
+
+        If n_stages is not None, then control will be piecewise constant with this number of stages
+        """
 
         if bocop_dir is None:
             bocop_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), "BOCOP")
@@ -329,8 +333,8 @@ class MixedStandApprox:
             initialisation, _ = self.run_policy(None)
         else:
             initialisation, _ = self.run_policy(init_policy, n_fixed_steps=999)
-        
-        self._set_bocop_params(init=initialisation, folder=bocop_dir)
+
+        self._set_bocop_params(init=initialisation, folder=bocop_dir, n_stages=n_stages)
 
         if verbose is True:
             subprocess.run([os.path.join(bocop_dir, "bocop.exe")], cwd=bocop_dir)
@@ -341,8 +345,14 @@ class MixedStandApprox:
 
         state_t, _, control_t, exit_text = bocop_utils.readSolFile(
             os.path.join(bocop_dir, "problem.sol"), ignore_fail=True)
-        
+
         actual_states = np.array([state_t(t) for t in self.setup['times']]).T
+
+        if n_stages is not None:
+            # Return control as piecewise constant
+            actual_control = np.array([control_t(t) for t in self.setup['times'][:-1]]).T
+            control_t = interp1d(
+                self.setup['times'][:-1], actual_control, kind="zero", fill_value="extrapolate")
 
         return (actual_states, control_t, exit_text)
 
@@ -372,7 +382,7 @@ class MixedStandApprox:
         return visualisation.plot_dpcs(
             self.setup['times'], self.run_data, ax=ax, combine_ages=combine_ages, **kwargs)
 
-    def _set_bocop_params(self, init=None, folder="BOCOP"):
+    def _set_bocop_params(self, init=None, folder="BOCOP", n_stages=None):
         """Save parameters and initial conditions to file for BOCOP optimisation."""
 
         with open(os.path.join(folder, "problem.bounds"), "r") as infile:
@@ -390,6 +400,28 @@ class MixedStandApprox:
             all_lines[42] = "0.0 0.0 both\n"
         else:
             all_lines[42] = "-1e6 1e6 both\n"
+
+        n_optim_vars = 0
+
+        # Setup correct bounds for optimisation variables and path constraints
+        if n_stages is None:
+            all_lines[6] = "16 16 7 0 0 1\n"
+
+            del all_lines[56:]
+            all_lines.append("\n# Bounds for the path constraints :\n")
+            all_lines.append("-2e+020 1 upper\n")
+        else:
+            n_optim_vars = n_stages * 7
+            all_lines[6] = "16 16 7 0 " + str(n_optim_vars) + " 8\n"
+
+            del all_lines[56:]
+            for i in range(n_optim_vars):
+                all_lines.append("0 1 both\n")
+
+            all_lines.append("\n# Bounds for the path constraints :\n")
+            all_lines.append("-2e+020 1 upper\n")
+            for i in range(7):
+                all_lines.append("0 0 equal\n")
 
         with _try_file_open(os.path.join(folder, "problem.bounds")) as outfile:
             outfile.writelines(all_lines)
@@ -435,6 +467,11 @@ class MixedStandApprox:
         all_lines[46] = str(self.params.get('discount_rate', 0.0)) + "\n"
         all_lines[47] = str(self.params.get('payoff_factor', 0.0)) + "\n"
 
+        if n_stages is None:
+            all_lines[48] = "0\n"
+        else:
+            all_lines[48] = str(n_stages) + "\n"
+
         with _try_file_open(os.path.join(folder, "problem.constants")) as outfile:
             outfile.writelines(all_lines)
 
@@ -444,6 +481,14 @@ class MixedStandApprox:
         n_steps = str(len(self.setup['times']) - 1)
         all_lines[5] = "time.initial double " + str(self.setup['times'][0]) + "\n"
         all_lines[6] = "time.final double " + str(self.setup['times'][-1]) + "\n"
+
+        if n_stages is None:
+            all_lines[12] = "parameter.dimension integer 0\n"
+            all_lines[15] = "constraint.dimension integer 1\n"
+        else:
+            all_lines[12] = "parameter.dimension integer " + str(n_optim_vars) + "\n"
+            all_lines[15] = "constraint.dimension integer 8\n"
+
         all_lines[18] = "discretization.steps integer " + n_steps + "\n"
 
         with _try_file_open(os.path.join(folder, "problem.def")) as outfile:
@@ -482,6 +527,19 @@ class MixedStandApprox:
 
             with _try_file_open(os.path.join(folder, "init", "state."+str(state)+".init")) as outf:
                 outf.writelines(all_lines)
+
+        optim_vars_init = [
+            "#Starting point file\n",
+            "# This file contains the values of the initial points\n",
+            "# for the optimisation variables\n", "\n", "# Number of optimization variables : \n",
+            "{0}\n".format(n_optim_vars), "\n", "Default values for the starting point : \n"
+        ]
+
+        for i in range(n_optim_vars):
+            optim_vars_init.append("0.1\n")
+
+        with _try_file_open(os.path.join(folder, "init", "optimvars.init")) as outf:
+            outf.writelines(optim_vars_init)
 
 class MixedStandFitter:
     """Fitting of MixedStandApprox model to simulation data."""
