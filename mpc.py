@@ -31,7 +31,7 @@ class Controller:
         self.approx_model = approx_model
 
     def run_controller(self, horizon, time_step, end_time, update_period=None,
-                       rolling_horz=False, stage_len=None):
+                       rolling_horz=False, stage_len=None, init_policy=None):
         """Run simulation under MPC strategy, optimising on approximate model.
 
         ---------
@@ -88,7 +88,8 @@ class Controller:
             if stage_len is not None:
                 n_stages = int((current_end - current_start) / stage_len)
 
-            _, current_control, _ = self.approx_model.optimise(n_stages=n_stages)
+            _, current_control, _ = self.approx_model.optimise(
+                n_stages=n_stages, init_policy=init_policy)
 
             simulation_times = np.arange(
                 current_start, np.minimum(next_update, end_time)+time_step, step=time_step)

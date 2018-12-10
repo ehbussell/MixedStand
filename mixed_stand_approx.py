@@ -330,11 +330,12 @@ class MixedStandApprox:
             bocop_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), "BOCOP")
 
         if init_policy is None:
-            initialisation, _ = self.run_policy(None)
+            init, _ = self.run_policy(None)
         else:
-            initialisation, _ = self.run_policy(init_policy, n_fixed_steps=999)
+            init, _ = self.run_policy(init_policy, n_fixed_steps=None)
 
-        self._set_bocop_params(init=initialisation, folder=bocop_dir, n_stages=n_stages)
+        self._set_bocop_params(init_state=init, init_policy=init_policy,
+                               folder=bocop_dir, n_stages=n_stages)
 
         if verbose is True:
             subprocess.run([os.path.join(bocop_dir, "bocop.exe")], cwd=bocop_dir)
@@ -382,7 +383,7 @@ class MixedStandApprox:
         return visualisation.plot_dpcs(
             self.setup['times'], self.run_data, ax=ax, combine_ages=combine_ages, **kwargs)
 
-    def _set_bocop_params(self, init=None, folder="BOCOP", n_stages=None):
+    def _set_bocop_params(self, init_state, init_policy=None, folder="BOCOP", n_stages=None):
         """Save parameters and initial conditions to file for BOCOP optimisation."""
 
         with open(os.path.join(folder, "problem.bounds"), "r") as infile:
@@ -494,40 +495,48 @@ class MixedStandApprox:
         with _try_file_open(os.path.join(folder, "problem.def")) as outfile:
             outfile.writelines(all_lines)
 
-        # # Initialisation
-        # control_init = np.array([[init.control(t)[j] for j in range(2)] for t in params['times']])
+        # Initialisation
 
-        # for control in range(2):
-        #     all_lines = [
-        #         "#Starting point file\n",
-        #         "# This file contains the values of the initial points\n",
-        #         "# for variable control #{0}\n".format(control), "\n", "# Type of initialization :\n",
-        #         "linear\n", "\n", "# Number of interpolation points :\n",
-        #         "{0}\n".format(len(params['times'])), "\n", "# Interpolation points :\n"]
-
-        #     for i, time in enumerate(params['times']):
-        #         all_lines.append("{0} {1}\n".format(time,
-        #                                             np.round(control_init[i, control], decimals=2)))
-
-        #     with _try_file_open(os.path.join(folder, "init",
-        #                                     "control." + str(control) + ".init")) as outfile:
-        #         outfile.writelines(all_lines)
-
+        # State initialisation
         for state in range(15):
             all_lines = [
                 "#Starting point file\n",
                 "# This file contains the values of the initial points\n",
-                "# for variable state #{0}\n".format(state), "\n", "# Type of initialization :\n",
+                "# for variable state #{0}\n".format(state), "\n",
+                "# Type of initialization :\n",
                 "linear\n", "\n", "# Number of interpolation points :\n",
                 "{0}\n".format(len(self.setup['times'])), "\n", "# Interpolation points :\n"]
 
             for i, time in enumerate(self.setup['times']):
                 all_lines.append("{0} {1}\n".format(time,
-                                                    np.round(init[state, i], decimals=3)))
+                                                    np.round(init_state[state, i], decimals=3)))
 
             with _try_file_open(os.path.join(folder, "init", "state."+str(state)+".init")) as outf:
                 outf.writelines(all_lines)
 
+        # Control initialisation
+        if init_policy is not None:
+            control_init = np.array([init_policy(t) for t in self.setup['times'][:-1]])
+
+            for control in range(7):
+                all_lines = [
+                    "#Starting point file\n",
+                    "# This file contains the values of the initial points\n",
+                    "# for variable control #{0}\n".format(control),
+                    "\n", "# Type of initialization :\n", "linear\n", "\n",
+                    "# Number of interpolation points :\n",
+                    "{0}\n".format(len(self.setup['times'][:-1])),
+                    "\n", "# Interpolation points :\n"]
+
+                for i, time in enumerate(self.setup['times'][:-1]):
+                    all_lines.append("{0} {1}\n".format(
+                        time, np.round(control_init[i, control], decimals=2)))
+
+                with _try_file_open(os.path.join(folder, "init",
+                                                 "control." + str(control) + ".init")) as outfile:
+                    outfile.writelines(all_lines)
+
+        # Optimisation variables (for piecewise constant control)
         optim_vars_init = [
             "#Starting point file\n",
             "# This file contains the values of the initial points\n",
