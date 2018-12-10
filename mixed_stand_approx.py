@@ -121,12 +121,13 @@ class MixedStandApprox:
             raise ValueError("Wrong format for fitted parameters!")
 
         self.run_data = None
+        self.run_objective = None
 
     def print_msg(self, msg):
         """Print message from class with class identifier."""
         identifier = "[" + self.__class__.__name__ + "]"
         print("{0:<20}{1}".format(identifier, msg))
-    
+
     def set_state_init(self, state_init):
         """Set the initial state for future runs."""
 
@@ -135,7 +136,7 @@ class MixedStandApprox:
 
             self.setup['state_init'] = np.sum(
                 np.reshape(state_init, (int(ncells), 15)), axis=0) / ncells
-        
+
         else:
             self.setup['state_init'] = state_init
 
@@ -150,7 +151,8 @@ class MixedStandApprox:
         integrand = np.exp(- self.params.get('discount_rate', 0.0) * time) * (
             self.params.get('cull_cost', 0.0) * self.params.get('control_rate', 0.0) * (
                 control[0] * (state[1] + state[4]) + control[1] * (state[7] + state[10]) +
-                control[2] * state[13] + control[3] + control[4]
+                control[2] * state[13] + control[3] * (state[12] + state[13]) +
+                control[4] * state[14]
             ) + self.params.get('protect_cost', 0.0) * self.params.get('control_rate', 0.0) * (
                 control[5] * (state[0] + state[3]) + control[6] * (state[6] + state[9])
             ) + self.params.get('div_cost', 0.0) * div_cost
@@ -274,6 +276,12 @@ class MixedStandApprox:
         """Run forward simulation using a given control policy.
 
         Function control_policy(t)
+
+        -------
+        Returns
+        -------
+        run_data, objective value, objective integral dynamics
+
         """
 
         ode = integrate.ode(self.state_deriv)
@@ -283,6 +291,7 @@ class MixedStandApprox:
 
         ts = [self.setup['times'][0]]
         xs = [self.setup['state_init']]
+        obj = [0.0]
 
         for time in self.setup['times'][1:]:
             if n_fixed_steps is not None:
@@ -302,6 +311,7 @@ class MixedStandApprox:
                     t_old_int = t_int
 
                 xs.append(state_old_int[:-1])
+                obj.append(state_old_int[-1])
                 ts.append(t_int)
 
             else:
@@ -309,6 +319,7 @@ class MixedStandApprox:
                     ode.integrate(time)
                     ts.append(ode.t)
                     xs.append(ode.y[:-1])
+                    obj.append(ode.y[-1])
                 else:
                     pdb.set_trace()
                     raise RuntimeError("ODE solver error!")
@@ -316,9 +327,9 @@ class MixedStandApprox:
         X = np.vstack(xs).T
         self.run_data = X
 
-        self.run_objective = self._terminal_cost(xs[-1]) + ode.y[-1]
+        self.run_objective = self._terminal_cost(xs[-1]) + obj[-1]
 
-        return X, self.run_objective
+        return X, self.run_objective, obj
 
     def optimise(self, bocop_dir=None, verbose=True, init_policy=None, n_stages=None):
         """Run BOCOP optimisation of control.
@@ -330,9 +341,11 @@ class MixedStandApprox:
             bocop_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), "BOCOP")
 
         if init_policy is None:
-            init, _ = self.run_policy(None)
+            init_state, _, init_obj = self.run_policy(None)
         else:
-            init, _ = self.run_policy(init_policy, n_fixed_steps=None)
+            init_state, _, init_obj = self.run_policy(init_policy, n_fixed_steps=None)
+
+        init = np.vstack((init_state, init_obj))
 
         self._set_bocop_params(init_state=init, init_policy=init_policy,
                                folder=bocop_dir, n_stages=n_stages)
@@ -498,7 +511,7 @@ class MixedStandApprox:
         # Initialisation
 
         # State initialisation
-        for state in range(15):
+        for state in range(16):
             all_lines = [
                 "#Starting point file\n",
                 "# This file contains the values of the initial points\n",
@@ -607,7 +620,7 @@ class MixedStandFitter:
             approx_model.beta[i+1] *= approx_model.beta[0]
 
         if show_plot:
-            model_run, objective = approx_model.run_policy(None)
+            model_run, objective, _ = approx_model.run_policy(None)
             model_inf = model_run[1:14:3, :]
             fig = plt.figure()
             ax = fig.add_subplot(111)
@@ -681,7 +694,7 @@ class MixedStandFitter:
             for i, j in itertools.product(range(xx.shape[0]), range(xx.shape[1])):
                 approx_model.beta[param1] = xx[i, j]
                 approx_model.beta[param2] = yy[i, j]
-                model_run, objective = approx_model.run_policy(None)
+                model_run, objective, _ = approx_model.run_policy(None)
                 model_inf = model_run[1:14:3, :]
                 zz[i, j] = np.sum(np.square((inf_data - model_inf)))
 
