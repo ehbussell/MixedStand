@@ -151,10 +151,11 @@ class MixedStandApprox:
         integrand = np.exp(- self.params.get('discount_rate', 0.0) * time) * (
             self.params.get('cull_cost', 0.0) * self.params.get('control_rate', 0.0) * (
                 control[0] * (state[1] + state[4]) + control[1] * (state[7] + state[10]) +
-                control[2] * state[13] + control[3] * (state[12] + state[13]) +
-                control[4] * state[14]
+                control[2] * state[13] + control[3] * np.sum(state[0:6]) +
+                control[4] * np.sum(state[6:12]) + control[5] * (state[12] + state[13]) +
+                control[6] * state[14]
             ) + self.params.get('protect_cost', 0.0) * self.params.get('control_rate', 0.0) * (
-                control[5] * (state[0] + state[3]) + control[6] * (state[6] + state[9])
+                control[7] * (state[0] + state[3]) + control[8] * (state[6] + state[9])
             ) + self.params.get('div_cost', 0.0) * div_cost
         )
 
@@ -251,21 +252,24 @@ class MixedStandApprox:
             d_state[13] -= control[2] * state[13]
 
             # Thinning
-            d_state[12] -= control[3] * state[12]
-            d_state[13] -= control[3] * state[13]
-            d_state[14] -= control[4] * state[14]
+            for i in range(6):
+                d_state[i] -= control[3] * state[i]
+                d_state[i+6] -= control[4] * state[i+6]
+            d_state[12] -= control[5] * state[12]
+            d_state[13] -= control[5] * state[13]
+            d_state[14] -= control[6] * state[14]
 
             # Phosphonite protectant
-            d_state[0] -= control[5] * state[0]
-            d_state[2] += control[5] * state[0]
-            d_state[3] -= control[5] * state[3]
-            d_state[5] += control[5] * state[3]
-            d_state[6] -= control[6] * state[6]
-            d_state[8] += control[6] * state[6]
-            d_state[9] -= control[6] * state[9]
-            d_state[11] += control[6] * state[9]
+            d_state[0] -= control[7] * state[0]
+            d_state[2] += control[7] * state[0]
+            d_state[3] -= control[7] * state[3]
+            d_state[5] += control[7] * state[3]
+            d_state[6] -= control[8] * state[6]
+            d_state[8] += control[8] * state[6]
+            d_state[9] -= control[8] * state[9]
+            d_state[11] += control[8] * state[9]
         else:
-            control = np.zeros(7)
+            control = np.zeros(9)
 
         # Objective function
         d_state[-1] = self._objective_integrand(time, state, control)
@@ -419,14 +423,14 @@ class MixedStandApprox:
 
         # Setup correct bounds for optimisation variables and path constraints
         if n_stages is None:
-            all_lines[6] = "16 16 7 0 0 1\n"
+            all_lines[6] = "16 16 9 0 0 1\n"
 
             del all_lines[56:]
             all_lines.append("\n# Bounds for the path constraints :\n")
             all_lines.append("-2e+020 1 upper\n")
         else:
-            n_optim_vars = n_stages * 7
-            all_lines[6] = "16 16 7 0 " + str(n_optim_vars) + " 8\n"
+            n_optim_vars = n_stages * 9
+            all_lines[6] = "16 16 9 0 " + str(n_optim_vars) + " 10\n"
 
             del all_lines[56:]
             for i in range(n_optim_vars):
@@ -434,7 +438,7 @@ class MixedStandApprox:
 
             all_lines.append("\n# Bounds for the path constraints :\n")
             all_lines.append("-2e+020 1 upper\n")
-            for i in range(7):
+            for i in range(9):
                 all_lines.append("0 0 equal\n")
 
         with _try_file_open(os.path.join(folder, "problem.bounds")) as outfile:
@@ -501,7 +505,7 @@ class MixedStandApprox:
             all_lines[15] = "constraint.dimension integer 1\n"
         else:
             all_lines[12] = "parameter.dimension integer " + str(n_optim_vars) + "\n"
-            all_lines[15] = "constraint.dimension integer 8\n"
+            all_lines[15] = "constraint.dimension integer 10\n"
 
         all_lines[18] = "discretization.steps integer " + n_steps + "\n"
 
@@ -531,7 +535,7 @@ class MixedStandApprox:
         if init_policy is not None:
             control_init = np.array([init_policy(t) for t in self.setup['times'][:-1]])
 
-            for control in range(7):
+            for control in range(9):
                 all_lines = [
                     "#Starting point file\n",
                     "# This file contains the values of the initial points\n",

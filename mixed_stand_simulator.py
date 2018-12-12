@@ -371,24 +371,27 @@ class MixedStandSimulator:
 
             roguing = np.tile(
                 np.array([control[0], control[0], control[1], control[1], control[2]]), self.ncells)
-            
+
             protection = np.tile(
-                np.array([control[5], control[5], control[6], control[6]]), self.ncells)
+                np.array([control[7], control[7], control[8], control[8]]), self.ncells)
 
             # Roguing
-            d_state[1 + self._indices['inf_s_idx']] -= roguing * state[1 + self._indices['inf_s_idx']]
+            d_state[1 + self._indices['inf_s_idx']] -= roguing * state[1+self._indices['inf_s_idx']]
 
             # Thinning
-            d_state[12::15] -= control[3] * state[12::15]
-            d_state[13::15] -= control[3] * state[13::15]
-            d_state[14::15] -= control[4] * state[14::15]
+            for i in range(6):
+                d_state[i::15] -= control[3] * state[i::15]
+                d_state[i+6::15] -= control[4] * state[i+6::15]
+            d_state[12::15] -= control[5] * state[12::15]
+            d_state[13::15] -= control[5] * state[13::15]
+            d_state[14::15] -= control[6] * state[14::15]
 
             # Phosphonite protectant
             d_state[self._indices['tan_s_idx']] -= protection * state[self._indices['tan_s_idx']]
-            d_state[self._indices['tan_s_idx'] + 2] += protection * state[self._indices['tan_s_idx']]
+            d_state[self._indices['tan_s_idx']+2] += protection * state[self._indices['tan_s_idx']]
 
         else:
-            control = np.zeros(7)
+            control = np.zeros(9)
 
         return d_state
 

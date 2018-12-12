@@ -73,7 +73,7 @@ class Controller:
 
         all_times = [current_start]
         all_run_data = np.empty((state_init.shape[0], 1))
-        all_control_data = np.empty((7, 0))
+        all_control_data = np.empty((9, 0))
 
         all_run_data[:, 0] = state_init
 

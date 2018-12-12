@@ -77,10 +77,11 @@
 	state_dynamics[15] = exp(- discount_rate * time) * (
 		cull_cost * control_rate * (
 			control[0] * (state[1] + state[4]) + control[1] * (state[7] + state[10]) +
-			control[2] * state[13] + control[3] * (state[12] + state[13]) +
-			control[4] * state[14]) + 
+			control[2] * state[13] + control[3] * small + control[4] * large +
+			control[5] * (state[12] + state[13]) +
+			control[6] * state[14]) + 
 		protect_cost * control_rate * (
-			control[5] * (state[0] + state[3]) + control[6] * (state[6] + state[9])) +
+			control[7] * (state[0] + state[3]) + control[8] * (state[6] + state[9])) +
 		div_cost * diversity_costs
 	);
 
@@ -144,18 +145,34 @@
 	state_dynamics[13] -= control[2] * control_rate * state[13];
 
 	// Thinning
-	state_dynamics[12] -= control[3] * control_rate * state[12];
-	state_dynamics[13] -= control[3] * control_rate * state[13];
-	state_dynamics[14] -= control[4] * control_rate * state[14];
+	// Small Tanoak
+	state_dynamics[0] -= control[3] * control_rate * state[0];
+	state_dynamics[1] -= control[3] * control_rate * state[1];
+	state_dynamics[2] -= control[3] * control_rate * state[2];
+	state_dynamics[3] -= control[3] * control_rate * state[3];
+	state_dynamics[4] -= control[3] * control_rate * state[4];
+	state_dynamics[5] -= control[3] * control_rate * state[5];
+	// Large Tanoak
+	state_dynamics[6] -= control[4] * control_rate * state[6];
+	state_dynamics[7] -= control[4] * control_rate * state[7];
+	state_dynamics[8] -= control[4] * control_rate * state[8];
+	state_dynamics[9] -= control[4] * control_rate * state[9];
+	state_dynamics[10] -= control[4] * control_rate * state[10];
+	state_dynamics[11] -= control[4] * control_rate * state[11];
+	// Bay
+	state_dynamics[12] -= control[5] * control_rate * state[12];
+	state_dynamics[13] -= control[5] * control_rate * state[13];
+	// Redwood
+	state_dynamics[14] -= control[6] * control_rate * state[14];
 
 	// Phosphonite protectant
-	state_dynamics[0] -= control[5] * control_rate * state[0];
-	state_dynamics[2] += control[5] * control_rate * state[0];
-	state_dynamics[3] -= control[5] * control_rate * state[3];
-	state_dynamics[5] += control[5] * control_rate * state[3];
-	state_dynamics[6] -= control[6] * control_rate * state[6];
-	state_dynamics[8] += control[6] * control_rate * state[6];
-	state_dynamics[9] -= control[6] * control_rate * state[9];
-	state_dynamics[11] += control[6] * control_rate * state[9];
+	state_dynamics[0] -= control[7] * control_rate * state[0];
+	state_dynamics[2] += control[7] * control_rate * state[0];
+	state_dynamics[3] -= control[7] * control_rate * state[3];
+	state_dynamics[5] += control[7] * control_rate * state[3];
+	state_dynamics[6] -= control[8] * control_rate * state[6];
+	state_dynamics[8] += control[8] * control_rate * state[6];
+	state_dynamics[9] -= control[8] * control_rate * state[9];
+	state_dynamics[11] += control[8] * control_rate * state[9];
 
 }
