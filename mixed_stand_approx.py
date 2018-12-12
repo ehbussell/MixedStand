@@ -13,6 +13,7 @@ import copy
 import pdb
 import subprocess
 import itertools
+import pickle
 import os
 import warnings
 from scipy.interpolate import interp1d
@@ -120,13 +121,68 @@ class MixedStandApprox:
         else:
             raise ValueError("Wrong format for fitted parameters!")
 
-        self.run_data = None
-        self.run_objective = None
+        self.run = {
+            'state': None,
+            'control': None,
+            'objective': None
+        }
+        self.optimisation = {
+            'control': None,
+            'interp_type': None
+        }
 
     def print_msg(self, msg):
         """Print message from class with class identifier."""
         identifier = "[" + self.__class__.__name__ + "]"
         print("{0:<20}{1}".format(identifier, msg))
+
+    def save_optimisation(self, filename):
+        """Save control optimisation and parameters to file."""
+
+        dump_obj = {
+            'optimisation': self.optimisation,
+            'setup': self.setup,
+            'params': self.params,
+            'beta': self.beta
+        }
+
+        with open(filename, "wb") as outfile:
+            pickle.dump(dump_obj, outfile)
+
+    def save_run(self, filename):
+        """Save run_data, control and run parameters to file."""
+
+        dump_obj = {
+            'run': self.run,
+            'setup': self.setup,
+            'params': self.params,
+            'beta': self.beta
+        }
+
+        with open(filename, "wb") as outfile:
+            pickle.dump(dump_obj, outfile)
+
+    def load_optimisation(self, filename):
+        """Load control optimisation and parameters."""
+
+        with open(filename, "rb") as infile:
+            load_obj = pickle.load(infile)
+
+        self.optimisation = load_obj['optimisation']
+        self.params = load_obj['params']
+        self.setup = load_obj['setup']
+        self.beta = load_obj['beta']
+
+    def load_run(self, filename):
+        """Load run_data, control and run parameters."""
+
+        with open(filename, "rb") as infile:
+            load_obj = pickle.load(infile)
+
+        self.run = load_obj['run']
+        self.setup = load_obj['setup']
+        self.params = load_obj['params']
+        self.beta = load_obj['beta']
 
     def set_state_init(self, state_init):
         """Set the initial state for future runs."""
@@ -333,12 +389,12 @@ class MixedStandApprox:
                     pdb.set_trace()
                     raise RuntimeError("ODE solver error!")
 
-        X = np.vstack(xs).T
-        self.run_data = X
+        state = np.vstack(xs).T
+        self.run['state'] = state
+        self.run['control'] = np.array([control_policy(t) for t in self.setup['times']]).T
+        self.run['objective'] = self._terminal_cost(xs[-1]) + obj[-1]
 
-        self.run_objective = self._terminal_cost(xs[-1]) + obj[-1]
-
-        return X, self.run_objective, obj
+        return state, self.run['objective'], obj
 
     def optimise(self, bocop_dir=None, verbose=True, init_policy=None, n_stages=None):
         """Run BOCOP optimisation of control.
@@ -376,13 +432,20 @@ class MixedStandApprox:
             actual_control = np.array([control_t(t) for t in self.setup['times'][:-1]]).T
             control_t = interp1d(
                 self.setup['times'][:-1], actual_control, kind="zero", fill_value="extrapolate")
+            self.optimisation['control'] = actual_control
+            self.optimisation['interp_kind'] = 'zero'
+        
+        else:
+            actual_control = np.array([control_t(t) for t in self.setup['times'][:-1]]).T
+            self.optimisation['control'] = actual_control
+            self.optimisation['interp_kind'] = 'linear'
 
         return (actual_states, control_t, exit_text)
 
     def plot_hosts(self, ax=None, proportions=True, combine_ages=True, **kwargs):
         """Plot host numbers as a function of time."""
 
-        if self.run_data is None:
+        if self.run['state'] is None:
             raise RuntimeError("No run has been simulated!")
 
         if ax is None:
@@ -390,12 +453,12 @@ class MixedStandApprox:
             ax = fig.add_subplot(111)
 
         return visualisation.plot_hosts(
-            self.setup['times'], self.run_data, ax=ax, combine_ages=combine_ages, **kwargs)
+            self.setup['times'], self.run['state'], ax=ax, combine_ages=combine_ages, **kwargs)
 
     def plot_dpcs(self, ax=None, proportions=True, combine_ages=True, **kwargs):
         """Plot simulator disease progress curves as a function of time."""
 
-        if self.run_data is None:
+        if self.run['state'] is None:
             raise RuntimeError("No run has been simulated!")
 
         if ax is None:
@@ -403,7 +466,7 @@ class MixedStandApprox:
             ax = fig.add_subplot(111)
 
         return visualisation.plot_dpcs(
-            self.setup['times'], self.run_data, ax=ax, combine_ages=combine_ages, **kwargs)
+            self.setup['times'], self.run['state'], ax=ax, combine_ages=combine_ages, **kwargs)
 
     def _set_bocop_params(self, init_state, init_policy=None, folder="BOCOP", n_stages=None):
         """Save parameters and initial conditions to file for BOCOP optimisation."""

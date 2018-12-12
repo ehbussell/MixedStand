@@ -11,6 +11,7 @@ import argparse
 from enum import IntEnum
 import copy
 import warnings
+import pickle
 import pdb
 import numpy as np
 from scipy.interpolate import interp1d
@@ -66,12 +67,38 @@ class MixedStandSimulator:
         self._indices = None
         self._space_weights = None
         self.ncells = np.prod(self.setup['landscape_dims'])
-        self.run_data = None
+        self.run = {
+            'state': None,
+            'control': None,
+            'objective': None
+        }
 
     def print_msg(self, msg):
         """Print message from class with class identifier."""
         identifier = "[" + self.__class__.__name__ + "]"
         print("{0:<20}{1}".format(identifier, msg))
+
+    def save_run(self, filename):
+        """Save run_data, control and run parameters to file."""
+
+        dump_obj = {
+            'run': self.run,
+            'setup': self.setup,
+            'params': self.params
+        }
+
+        with open(filename, "wb") as outfile:
+            pickle.dump(dump_obj, outfile)
+
+    def load_run(self, filename):
+        """Load run_data, control and run parameters."""
+
+        with open(filename, "rb") as infile:
+            load_obj = pickle.load(infile)
+
+        self.run = load_obj['run']
+        self.setup = load_obj['setup']
+        self.params = load_obj['params']
 
     def _initialise(self):
         """Initialise ready for simulation - set up initial conditions, matrices and rates."""
@@ -433,7 +460,7 @@ class MixedStandSimulator:
                     k3 = h * self.state_deriv(t_int + 0.5 * h, state_old_int + 0.5 * k2,
                                               control_policy)
                     k4 = h * self.state_deriv(t_int + h, state_old_int + k3, control_policy)
-                    
+
                     state_old_int = np.clip(state_old_int + (k1 + k2 + k2 + k3 + k3 + k4) / 6,
                                             0.0, None)
                     t_old_int = t_int
@@ -450,8 +477,12 @@ class MixedStandSimulator:
                     pdb.set_trace()
                     raise RuntimeError("ODE solver error!")
 
-        self.run_data = np.vstack(xs).T
-        return self.run_data
+        state = np.vstack(xs).T
+
+        self.run['state'] = state
+        self.run['control'] = np.array([control_policy(t) for t in self.setup['times']]).T
+
+        return state
 
 class MixedStandAnimator:
     """Plotting object for MixedStandSimulator results."""
