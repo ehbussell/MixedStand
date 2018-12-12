@@ -239,6 +239,11 @@ class MixedStandApprox:
         d_state[12] -= inf_rate
         d_state[13] += inf_rate
 
+        # Vaccine decay
+        for i in range(4):
+            d_state[3*i+2] -= self.params.get("vaccine_decay") * state[3*i+2]
+            d_state[3*i] += self.params.get("vaccine_decay") * state[3*i+2]
+
         if control_func is not None:
             control = control_func(time) * self.params.get('control_rate', 0.0)
             # control[3] = np.minimum(control[3], 10000000*(state[12] > 0))
@@ -489,6 +494,8 @@ class MixedStandApprox:
             all_lines[48] = "0\n"
         else:
             all_lines[48] = str(n_stages) + "\n"
+
+        all_lines[49] = str(self.params.get('vaccine_decay', 0.0)) + "\n"
 
         with _try_file_open(os.path.join(folder, "problem.constants")) as outfile:
             outfile.writelines(all_lines)

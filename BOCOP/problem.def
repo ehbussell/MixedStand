@@ -11,7 +11,7 @@ state.dimension integer 16
 control.dimension integer 9
 algebraic.dimension integer 0
 parameter.dimension integer 180
-constant.dimension integer 44
+constant.dimension integer 45
 boundarycond.dimension integer 16
 constraint.dimension integer 10
 
@@ -127,6 +127,7 @@ constant.40 string protect_cost
 constant.41 string discount_rate
 constant.42 string payoff_factor
 constant.43 string n_stages
+constant.44 string vaccine_decay
 
 # Solution file :
 solution.file string problem.sol

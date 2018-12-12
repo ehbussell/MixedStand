@@ -358,6 +358,12 @@ class MixedStandSimulator:
             inf_force[self._indices['tan_inf_force_idx']] * state[self._indices['tan_s_idx'] + 2] *
             self.params.get('treat_eff', 0.0))
 
+        # Vaccine decay
+        d_state[self._indices['tan_s_idx'] + 2] -= (
+            self.params.get("vaccine_decay", 0.0) * state[self._indices['tan_s_idx'] + 2])
+        d_state[self._indices['tan_s_idx']] += (
+            self.params.get("vaccine_decay", 0.0) * state[self._indices['tan_s_idx'] + 2])
+
         if control_func is not None:
             control = control_func(time) * self.params.get('control_rate', 0.0)
 

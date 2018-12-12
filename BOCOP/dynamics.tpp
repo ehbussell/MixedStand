@@ -54,6 +54,7 @@
 	double cull_cost = constants[39];
 	double protect_cost = constants[40];
 	double discount_rate = constants[41];
+	double vaccine_decay = constants[44];
 
 	Tdouble inf_rate = 0.0;
 	Tdouble empty_space = 1.0 - space[4] * (state[12] + state[13]) - space[5] * state[14];
@@ -98,9 +99,10 @@
 								* empty_space;
 		
 		// Mortality, recovery & resprouting
-		state_dynamics[3*age] += - nat_mort[age] * state[3*age] + recov[0] * state[3*age+1];
+		state_dynamics[3*age] += - nat_mort[age] * state[3*age] + recov[0] * state[3*age+1]
+									+ vaccine_decay * state[3*age+2];
 		state_dynamics[3*age+1] += - (nat_mort[age] + inf_mort[age] + recov[0]) * state[3*age+1];
-		state_dynamics[3*age+2] += - nat_mort[age] * state[3*age+2];
+		state_dynamics[3*age+2] += - (nat_mort[age] + vaccine_decay) * state[3*age+2];
 		state_dynamics[0] += inf_mort[age] * resprout * state[3*age+1];
 
 		// Age transitions
@@ -118,6 +120,10 @@
 		state_dynamics[3*age] -= state[3*age] * inf_rate;
 		state_dynamics[3*age+1] += inf_rate * (state[3*age] + state[3*age+2] * treat_eff);
 		state_dynamics[3*age+2] -= state[3*age+2] * inf_rate * treat_eff;
+
+		// Vaccine decay
+		// state_dynamics[3*age+2] -= vaccine_decay * state[3*age+2];
+		// std::cout << vaccine_decay << " " << state[3*age+2] << " " << state_dynamics[3*age+2] << std::endl;
 	}
 
 	// Bay and Redwood dynamics
