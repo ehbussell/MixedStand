@@ -105,14 +105,14 @@ def plot_control(times, control_policy, ax=None, labels=None, colors=None, **kwa
 
     if labels is None:
         labels = [
-            "Rogue Tan (Small)", "Rogue Tan (Large)", "Rogue Bay", "Thin Bay", "Thin Red",
-            "Protect Tan (Small)", "Protect Tan (Large)"
+            "Rogue Tan (Small)", "Rogue Tan (Large)", "Rogue Bay", "Thin Tan (Small)",
+            "Thin Tan (Large)", "Thin Bay", "Thin Red", "Protect Tan (Small)", "Protect Tan (Large)"
         ]
 
     if colors is None:
         colors = [mpl.colors.to_rgba(col, alpha=alph) for col, alph in zip(
-            ["r", "r", "r", "b", "b", "b", "purple", "purple"],
-            [0.75, 0.5, 0.25, 0.75, 0.5, 0.25, 0.6, 0.3]
+            ["r", "r", "r", "b", "b", "b", "b", "purple", "purple"],
+            [0.75, 0.5, 0.25, 1.0, 0.6, 0.4, 0.15, 0.6, 0.3]
         )]
     all_controls = np.array([control_policy(t) for t in times]).T
 
