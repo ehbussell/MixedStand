@@ -33,7 +33,7 @@
 	// Total control proportion <= 1
 	path_constraints[0] = control[0] + control[1] + control[2] + control[3] + control[4] +
 						  control[5] + control[6] + control[7] + control[8];
-	
+
 	if (dim_path_constraints > 1){
 		path_constraints[1] = control[0] - parametrizedcontrol(
 			1, constants[43], 0, &optimvars[0*(int)constants[43]], normalized_time,
@@ -68,7 +68,7 @@
 			fixed_initial_time, fixed_final_time);
 
 		path_constraints[9] = control[8] - parametrizedcontrol(
-			1, constants[43], 0, &optimvars[6*(int)constants[43]], normalized_time,
+			1, constants[43], 0, &optimvars[8*(int)constants[43]], normalized_time,
 			fixed_initial_time, fixed_final_time);
 
 	}
