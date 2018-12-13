@@ -507,13 +507,13 @@ class MixedStandAnimator:
         kwargs:         Keyword arguments passed to pcolormesh
         """
 
-        if self.simulator.run_data is None:
+        if self.simulator.run['state'] is None:
             raise RuntimeError("No run has been simulated!")
 
         if plot_function is None:
             plot_function = self._default_plot_func
 
-        run_data = interp1d(self.simulator.setup['times'], self.simulator.run_data)
+        run_data = interp1d(self.simulator.setup['times'], self.simulator.run['state'])
         fps = 30
         nframes = fps * video_length
         times = np.linspace(
@@ -559,7 +559,7 @@ class MixedStandAnimator:
     def plot_hosts(self, ax=None, proportions=True, combine_ages=True, **kwargs):
         """Plot simulator host numbers as a function of time."""
 
-        if self.simulator.run_data is None:
+        if self.simulator.run['state'] is None:
             raise RuntimeError("No run has been simulated!")
 
         if ax is None:
@@ -570,13 +570,13 @@ class MixedStandAnimator:
 
         return visualisation.plot_hosts(
             self.simulator.setup['times'],
-            np.sum(np.reshape(self.simulator.run_data, (ncells, 15, -1)), axis=0) / ncells,
+            np.sum(np.reshape(self.simulator.run['state'], (ncells, 15, -1)), axis=0) / ncells,
             ax=ax, combine_ages=combine_ages, **kwargs)
 
     def plot_dpcs(self, ax=None, proportions=True, combine_ages=True, **kwargs):
         """Plot simulator disease progress curves as a function of time."""
 
-        if self.simulator.run_data is None:
+        if self.simulator.run['state'] is None:
             raise RuntimeError("No run has been simulated!")
 
         if ax is None:
@@ -587,5 +587,5 @@ class MixedStandAnimator:
 
         return visualisation.plot_dpcs(
             self.simulator.setup['times'],
-            np.sum(np.reshape(self.simulator.run_data, (ncells, 15, -1)), axis=0) / ncells,
+            np.sum(np.reshape(self.simulator.run['state'], (ncells, 15, -1)), axis=0) / ncells,
             ax=ax, combine_ages=combine_ages, **kwargs)

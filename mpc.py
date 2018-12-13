@@ -5,6 +5,7 @@ from enum import IntEnum
 import copy
 import warnings
 import pdb
+import pickle
 import numpy as np
 from scipy.interpolate import interp1d
 from scipy import integrate
@@ -29,6 +30,10 @@ class Controller:
 
         self.simulator = simulator
         self.approx_model = approx_model
+
+        self.run_times = None
+        self.run_state = None
+        self.run_control = None
 
     def run_controller(self, horizon, time_step, end_time, update_period=None,
                        rolling_horz=False, stage_len=None, init_policy=None):
@@ -112,4 +117,20 @@ class Controller:
         all_control_data = np.hstack((
             all_control_data, np.array([current_control(all_times[-1])]).T))
 
+        self.run_times = all_times
+        self.run_state = all_run_data
+        self.run_control = all_control_data
+
         return all_times, all_run_data, all_control_data
+
+    def save_optimisation(self, filename):
+        """Save control optimisation to file."""
+
+        dump_obj = {
+            'times': self.run_times,
+            'state': self.run_state,
+            'control': self.run_control,
+        }
+
+        with open(filename, "wb") as outfile:
+            pickle.dump(dump_obj, outfile)
