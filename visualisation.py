@@ -102,19 +102,29 @@ def plot_control(times, control_policy, ax=None, labels=None, colors=None, **kwa
     if ax is None:
         fig = plt.figure(111)
         ax = fig.add_subplot(111)
+    
+    order = np.array([3, 4, 5, 6, 0, 1, 2, 7, 8])
 
     if labels is None:
         labels = [
-            "Rogue Tan (Small)", "Rogue Tan (Large)", "Rogue Bay", "Thin Tan (Small)",
-            "Thin Tan (Large)", "Thin Bay", "Thin Red", "Protect Tan (Small)", "Protect Tan (Large)"
+            "Thin Tan (Small)", "Thin Tan (Large)", "Thin Bay", "Thin Red",
+            "Rogue Tan (Small)", "Rogue Tan (Large)", "Rogue Bay", "Protect Tan (Small)",
+            "Protect Tan (Large)"
         ]
 
     if colors is None:
-        colors = [mpl.colors.to_rgba(col, alpha=alph) for col, alph in zip(
-            ["r", "r", "r", "b", "b", "b", "b", "purple", "purple"],
-            [0.75, 0.5, 0.25, 1.0, 0.6, 0.4, 0.15, 0.6, 0.3]
-        )]
-    all_controls = np.array([control_policy(t) for t in times]).T
+        cmap = plt.get_cmap("tab20c")
+        # colors = [mpl.colors.to_rgba(col, alpha=alph) for col, alph in zip(
+        #     ["r", "r", "r", "b", "b", "b", "b", "purple", "purple"],
+        #     [0.75, 0.5, 0.25, 1.0, 0.6, 0.4, 0.15, 0.6, 0.3]
+        # )]
+        # colors = ([cmap(0.025 + x*0.05) for x in [7, 6, 5, 4]] +
+        #           [cmap(0.025 + x*0.05) for x in [14, 13, 12]] +
+        #           [cmap(0.025 + x*0.05) for x in [18, 16]])
+        colors = ([cmap(0.025 + x*0.05) for x in [8, 9, 10, 11]] +
+                  [cmap(0.025 + x*0.05) for x in [4, 5, 6]] +
+                  [cmap(0.025 + x*0.05) for x in [12, 14]])
+    all_controls = np.array([control_policy(t)[order] for t in times]).T
 
     ax.stackplot(times, *all_controls, labels=labels, colors=colors, **kwargs)
 
