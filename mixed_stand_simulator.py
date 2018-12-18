@@ -480,7 +480,11 @@ class MixedStandSimulator:
         state = np.vstack(xs).T
 
         self.run['state'] = state
-        self.run['control'] = np.array([control_policy(t) for t in self.setup['times']]).T
+
+        if control_policy is None:
+            self.run['control'] = None
+        else:
+            self.run['control'] = np.array([control_policy(t) for t in self.setup['times']]).T
 
         return state
 
