@@ -391,7 +391,10 @@ class MixedStandApprox:
 
         state = np.vstack(xs).T
         self.run['state'] = state
-        self.run['control'] = np.array([control_policy(t) for t in self.setup['times']]).T
+        if control_policy is None:
+            self.run['control'] = None
+        else:
+            self.run['control'] = np.array([control_policy(t) for t in self.setup['times']]).T
         self.run['objective'] = self._terminal_cost(xs[-1]) + obj[-1]
 
         return state, self.run['objective'], obj
@@ -656,30 +659,55 @@ class MixedStandFitter:
         self.params = copy.deepcopy(params)
         self.beta = None
 
-    def fit(self, start, bounds, show_plot=False):
-        """Fit infection rate parameters, minimising sum of squared errors from simulation DPCs."""
+    def fit(self, start, bounds, dataset=None, show_plot=False, scale=True, averaged=False):
+        """Fit infection rate parameters, minimising sum of squared errors from simulation DPCs.
 
-        # First get simulator data
-        simulator = ms_sim.MixedStandSimulator(self.setup, self.params)
-        sim_run = simulator.run_policy(None)
+        start:      Initial values of beta parameters for optimisation (length 7 array).
+        bounds:     Bounds for beta parameters (array of 7 (lower, upper) tuples).
+        dataset:    If present use this dataset of simulation runs to fit approximate model. If 2d
+                    array then corresponds to single simulation run output. If 3d, first dimension
+                    specifies each run in the ensemble. Can be averaged across cells.
+        show_plot:  Whether to show interactive plot of fit.
+        scale:      Whether to use scaling when fitting to weight smaller numbers more.
+        averaged:   Whether dataset has been averaged across cells.
+        """
 
+        # Get simulator data if not provided
         ncells = np.prod(self.setup['landscape_dims'])
-
         inf_idx = np.array([15*loc+np.arange(1, 14, 3) for loc in range(ncells)]).flatten()
-        inf_data = np.sum(sim_run[inf_idx, :].reshape((ncells, 5, -1)), axis=0) / ncells
 
-        scales = np.amax(inf_data, axis=1)
-        scaling_matrix = np.tile(
-            np.divide(1, scales, out=np.zeros_like(scales), where=(scales > 0)),
-            inf_data.shape[1]).reshape((5, -1), order="F")
+        if dataset is None:
+            simulator = ms_sim.MixedStandSimulator(self.setup, self.params)
+            sim_run = simulator.run_policy(None)
+            inf_data = np.sum(sim_run[inf_idx, :].reshape((ncells, 5, -1)), axis=0) / ncells
+
+        elif len(dataset.shape) == 2:
+            if averaged:
+                inf_data = dataset[np.arange(1, 14, 3), :]
+            else:
+                inf_data = np.sum(dataset[inf_idx, :].reshape((ncells, 5, -1)), axis=0) / ncells
+
+        else:
+            if averaged:
+                inf_data = dataset[:, np.arange(1, 14, 3), :]
+            else:
+                inf_data = np.sum(dataset[:, inf_idx, :].reshape((dataset.shape[0], ncells, 5, -1)),
+                                axis=1) / ncells
+
+        # TODO check scaling sensible
+        if scale:
+            scales = np.amax(inf_data, axis=-1)
+            if len(scales.shape) > 1:
+                scales = np.mean(scales, axis=0)
+            scaling_matrix = np.tile(
+                np.divide(1, scales, out=np.zeros_like(scales), where=(scales > 0)),
+                inf_data.shape[-1]).reshape((5, -1), order="F")
+        else:
+            scaling_matrix = np.ones(inf_data.shape[-2:])
 
         start_transformed = logit_transform(start, bounds)
 
         approx_model = MixedStandApprox(self.setup, self.params, start)
-        approx_model.params['space_tanoak'] = simulator.params['space_tanoak']
-        approx_model.params['recruit_tanoak'] = simulator.params['recruit_tanoak']
-        approx_model.params['recruit_bay'] = simulator.params['recruit_bay']
-        approx_model.params['recruit_redwood'] = simulator.params['recruit_redwood']
 
         # Minimise SSE
         param_fit_transformed = minimize(
@@ -700,8 +728,13 @@ class MixedStandFitter:
             ax = fig.add_subplot(111)
             names = ["Tan 1", "Tan 2", "Tan 3", "Tan 4", "Bay"]
             for i, name in enumerate(names):
-                ax.plot(self.setup['times'], inf_data[i, :], color="C{}".format(i), alpha=0.5,
-                        label=name)
+                if len(inf_data.shape) > 2:
+                    ax.plot([], color="C{}".format(i), label=name)
+                    ax.plot(self.setup['times'], inf_data[:, i, :].T, color="C{}".format(i),
+                            alpha=0.2)
+                else:
+                    ax.plot(self.setup['times'], inf_data[i, :], color="C{}".format(i), alpha=0.5,
+                            label=name)
                 ax.plot(self.setup['times'], model_inf[i, :], color="C{}".format(i))
             ax.legend()
             fig.tight_layout()
@@ -806,14 +839,13 @@ class MixedStandFitter:
             approx_model.beta[i+1] *= approx_model.beta[0]
         # approx_model.powers = powers
 
-        model_run = approx_model.run_policy(None)
+        model_run, *_ = approx_model.run_policy(None)
         model_inf = model_run[1:14:3, :]
 
-        if sim_inf.shape != model_inf.shape:
+        if sim_inf.shape[-2:] != model_inf.shape:
             raise RuntimeError("Wrong shaped arrays for SSE calculation")
 
         sse = np.sum(np.square(scales * (sim_inf - model_inf)))
-        print(sse)
         return sse
 
 def logit_transform(params, bounds):
