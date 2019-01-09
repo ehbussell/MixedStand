@@ -342,17 +342,64 @@ class MixedStandSimulator:
         empty_space = self._get_space(state)
 
         recruit_rates = np.add.reduceat(
-            np.reshape(self._recruit_rates * state, (self.ncells, 15)), [0,12,14], axis=1).flatten()
+            np.reshape(self._recruit_rates * state, (self.ncells, 15)),
+            [0, 12, 14], axis=1).flatten()
 
         return recruit_rates * np.repeat(empty_space, 3)
 
     def _get_space(self, state):
         """Return space for given full state."""
-        
+
         space_occupied = np.sum(np.reshape(self._space_weights * state, (self.ncells, 15)), axis=1)
         empty_space = np.maximum(0, 1.0 - space_occupied)
 
         return empty_space
+
+    def _objective_integrand(self, time, state, control):
+        """Integrand of objective function, including control costs and diversity costs."""
+
+        integrand = 0.0
+
+        state = np.sum(np.reshape(state, (self.ncells, 15)), axis=0)
+
+        if self.params.get('div_cost', 0.0) != 0.0:
+            props = np.divide(np.array([np.sum(state[0:6]), np.sum(state[6:12]),
+                                        state[12] + state[13], state[14]]),
+                              np.sum(state[0:15]), out=np.zeros(4),
+                              where=(np.sum(state[0:15]) > 0.0))
+            div_cost = np.sum(props * np.log(props, out=np.zeros_like(props), where=(props > 0.0)))
+
+            integrand += self.params.get('div_cost', 0.0) * div_cost
+
+        if self.params.get('cull_cost', 0.0) != 0.0:
+            integrand += (
+                self.params.get('cull_cost', 0.0) * self.params.get('control_rate', 0.0) * (
+                    control[0] * (state[1] + state[4]) + control[1] * (state[7] + state[10]) +
+                    control[2] * state[13] + control[3] * np.sum(state[0:6]) +
+                    control[4] * np.sum(state[6:12]) + control[5] * (state[12] + state[13]) +
+                    control[6] * state[14]
+                )
+            )
+
+        if self.params.get('protect_cost', 0.0) != 0.0:
+            integrand += (
+                self.params.get('protect_cost', 0.0) * self.params.get('control_rate', 0.0) *
+                (control[7] * (state[0] + state[3]) + control[8] * (state[6] + state[9])))
+
+        integrand *= np.exp(- self.params.get('discount_rate', 0.0) * time)
+
+        return integrand
+
+    def _terminal_cost(self, state):
+        """Payoff term in objective function"""
+
+        state = np.sum(np.reshape(state, (self.ncells, 15)), axis=0)
+
+        payoff = - self.params.get('payoff_factor', 0.0) * np.exp(
+            - self.params.get('discount_rate', 0.0) * self.setup['times'][-1]) * (
+                state[6] + state[8] + state[9] + state[11])
+
+        return payoff
 
 
     def state_deriv(self, time, state, control_func=None):
@@ -364,6 +411,9 @@ class MixedStandSimulator:
                             vaccinate each tanoak age class.
         """
 
+        obj = state[-1]
+        state = state[:-1]
+
         d_state = np.zeros_like(state)
 
         for loc in range(self.ncells):
@@ -372,7 +422,7 @@ class MixedStandSimulator:
         recruit = self._get_recruit(state)
 
         # TODO this matrix multiplication slowest calculation step currently - change to loop over
-        # locations as with linear matrix.
+        # locations as with linear matrix?
         inf_force = np.matmul(self._inf_matrix, state[1+self._indices['inf_s_idx']])
 
         d_state[self._indices['recruit_idx']] += recruit
@@ -426,13 +476,14 @@ class MixedStandSimulator:
         else:
             control = np.zeros(9)
 
-        return d_state
+        d_obj = self._objective_integrand(time, state, control)
+
+        return np.append(d_state, [d_obj])
 
     def run_policy(self, control_policy=None, n_fixed_steps=None):
         """Run forward simulation using a given control policy.
 
-        Function control_policy(t, X) returns list of budget allocations for
-            each region - [budget_S1, budget_I1, budget_S2, budget_I2, budget_S3]
+        Function control_policy(t, X) returns list of budget allocations for each control
 
         n_fixed_steps:  If not None then an explicit RK4 scheme is used with this number of
                         internal steps between time points as default.
@@ -442,11 +493,12 @@ class MixedStandSimulator:
 
         ode = integrate.ode(self.state_deriv)
         ode.set_integrator('lsoda', nsteps=1000, atol=1e-10, rtol=1e-8)
-        ode.set_initial_value(state_init, self.setup['times'][0])
+        ode.set_initial_value(np.append(state_init, [0.0]), self.setup['times'][0])
         ode.set_f_params(control_policy)
 
         ts = [self.setup['times'][0]]
         xs = [state_init]
+        obj = [0.0]
 
         for time in self.setup['times'][1:]:
             if n_fixed_steps is not None:
@@ -465,14 +517,16 @@ class MixedStandSimulator:
                                             0.0, None)
                     t_old_int = t_int
 
-                xs.append(state_old_int)
-                ts.append(t_int)
+                xs.append(state_old_int[:-1])
+                obj.append(state_old_int[-1])
+                ts.append(time)
 
             else:
                 if ode.successful():
                     ode.integrate(time)
                     ts.append(ode.t)
-                    xs.append(ode.y)
+                    xs.append(ode.y[:-1])
+                    obj.append(ode.y[-1])
                 else:
                     pdb.set_trace()
                     raise RuntimeError("ODE solver error!")
@@ -485,8 +539,9 @@ class MixedStandSimulator:
             self.run['control'] = None
         else:
             self.run['control'] = np.array([control_policy(t) for t in self.setup['times']]).T
+        self.run['objective'] = self._terminal_cost(xs[-1]) + obj[-1]
 
-        return state
+        return state, self.run['objective'], obj
 
 class MixedStandAnimator:
     """Plotting object for MixedStandSimulator results."""
