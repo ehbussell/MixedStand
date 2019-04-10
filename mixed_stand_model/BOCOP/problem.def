@@ -1,0 +1,137 @@
+# This file defines all dimensions and parameters
+# values for your problem :
+
+# Initial and final time :
+time.free string none
+time.initial double 0.0
+time.final double 100.0
+
+# Dimensions :
+state.dimension integer 16
+control.dimension integer 9
+algebraic.dimension integer 0
+parameter.dimension integer 180
+constant.dimension integer 45
+boundarycond.dimension integer 16
+constraint.dimension integer 10
+
+# Discretization :
+discretization.steps integer 200
+discretization.method string gauss
+
+# Optimization :
+optimization.type string single
+batch.type integer 0
+batch.index integer 0
+batch.nrange integer 1
+batch.lowerbound double 0
+batch.upperbound double 0
+batch.directory string none
+
+# Initialization :
+initialization.type string from_init_file
+initialization.file string none
+# initialization.type string from_sol_file_cold
+# initialization.file string problem.sol
+
+# Parameter identification :
+paramid.type string false
+paramid.separator string ,
+paramid.file string no_directory
+paramid.dimension integer 0
+
+# Names :
+state.0 string Tan1_S
+state.1 string Tan1_I
+state.2 string Tan1_V
+state.3 string Tan2_S
+state.4 string Tan2_I
+state.5 string Tan2_V
+state.6 string Tan3_S
+state.7 string Tan3_I
+state.8 string Tan3_V
+state.9 string Tan4_S
+state.10 string Tan4_I
+state.11 string Tan4_V
+state.12 string Bay_S
+state.13 string Bay_I
+state.14 string Red
+state.15 string Objective
+control.0 string Rogue_TanSmall
+control.1 string Rogue_TanLarge
+control.2 string Rogue_Bay
+control.3 string Thin_TanSmall
+control.4 string Thin_TanLarge
+control.5 string Thin_Bay
+control.6 string Thin_Red
+control.7 string Protect_TanSmall
+control.8 string Protect_TanLarge
+boundarycond.0 string init_Tan1_S
+boundarycond.1 string init_Tan1_I
+boundarycond.2 string init_Tan1_V
+boundarycond.3 string init_Tan2_S
+boundarycond.4 string init_Tan2_I
+boundarycond.5 string init_Tan2_V
+boundarycond.6 string init_Tan3_S
+boundarycond.7 string init_Tan3_I
+boundarycond.8 string init_Tan3_V
+boundarycond.9 string init_Tan4_S
+boundarycond.10 string init_Tan4_I
+boundarycond.11 string init_Tan4_V
+boundarycond.12 string init_Bay_S
+boundarycond.13 string init_Bay_I
+boundarycond.14 string init_Red
+boundarycond.15 string init_Obj
+constraint.0 string Budget
+constant.0 string beta_1_1
+constant.1 string beta_1_2
+constant.2 string beta_1_3
+constant.3 string beta_1_4
+constant.4 string beta_12
+constant.5 string beta_21
+constant.6 string beta_2
+constant.7 string space_11
+constant.8 string space_12
+constant.9 string space_13
+constant.10 string space_14
+constant.11 string space_2
+constant.12 string space_3
+constant.13 string recruit_11
+constant.14 string recruit_12
+constant.15 string recruit_13
+constant.16 string recruit_14
+constant.17 string recruit_2
+constant.18 string recruit_3
+constant.19 string nat_mort_11
+constant.20 string nat_mort_12
+constant.21 string nat_mort_13
+constant.22 string nat_mort_14
+constant.23 string nat_mort_2
+constant.24 string nat_mort_3
+constant.25 string inf_mort_11
+constant.26 string inf_mort_12
+constant.27 string inf_mort_13
+constant.28 string inf_mort_14
+constant.29 string resprout_tan
+constant.30 string age_trans_1
+constant.31 string age_trans_2
+constant.32 string age_trans_3
+constant.33 string recov_tan
+constant.34 string recov_bay
+constant.35 string primary_inf
+constant.36 string max_control_rate
+constant.37 string treat_eff
+constant.38 string div_cost
+constant.39 string cull_cost
+constant.40 string protect_cost
+constant.41 string discount_rate
+constant.42 string payoff_factor
+constant.43 string n_stages
+constant.44 string vaccine_decay
+
+# Solution file :
+solution.file string problem.sol
+
+# Iteration output frequency :
+iteration.output.frequency integer 0
+

@@ -1,0 +1,7 @@
+max_iter 500
+print_level 5
+acceptable_tol 1.0e-6
+tol 1.0e-8
+mu_strategy adaptive
+output_file result.out
+check_derivatives_for_naninf yes

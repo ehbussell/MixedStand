@@ -1,0 +1,9 @@
+.vscode/
+__pycache__/
+*.exe
+data/
+figures/
+mixed_stand_model/BOCOP/build/
+mixed_stand_model/BOCOP/init/
+mixed_stand_model/BOCOP/*.sol*
+mixed_stand_model/BOCOP/*.out
