@@ -67,12 +67,12 @@
 	Tdouble bay = fabs(state[12] + state[13]);
 	Tdouble red = fabs(state[14]);
 
-	// Find total number of hosts
-	Tdouble nhosts = small + large + bay + red;
+	// // Find total number of hosts
+	// Tdouble nhosts = small + large + bay + red;
 
-	Tdouble diversity_costs = log(
-		pow(small / nhosts, small / nhosts) * pow(large / nhosts, large / nhosts) *
-		pow(bay / nhosts, bay / nhosts) * pow(red / nhosts, red / nhosts));
+	// Tdouble diversity_costs = log(
+	// 	pow(small / nhosts, small / nhosts) * pow(large / nhosts, large / nhosts) *
+	// 	pow(bay / nhosts, bay / nhosts) * pow(red / nhosts, red / nhosts));
 	
 	// Objective function
 	state_dynamics[15] = exp(- discount_rate * time) * (
@@ -82,8 +82,8 @@
 			control[5] * (state[12] + state[13]) +
 			control[6] * state[14]) + 
 		protect_cost * control_rate * (
-			control[7] * (state[0] + state[3]) + control[8] * (state[6] + state[9])) +
-		div_cost * diversity_costs
+			control[7] * (state[0] + state[3]) + control[8] * (state[6] + state[9]))
+		// div_cost * diversity_costs
 	);
 
 	// Dynamics
