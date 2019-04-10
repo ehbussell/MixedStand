@@ -7,31 +7,13 @@ Species are labelled as:
     3) Redwood
 """
 
-import argparse
-from enum import IntEnum
 import copy
-import warnings
+import logging
 import pickle
-import pdb
 import numpy as np
-from scipy.interpolate import interp1d
 from scipy import integrate
-import matplotlib.pyplot as plt
-from matplotlib import animation
-import visualisation
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description=__doc__,
-        formatter_class=argparse.RawDescriptionHelpFormatter)
-    args = parser.parse_args()
-
-
-class Species(IntEnum):
-    """Host species."""
-    TANOAK = 0
-    BAY = 1
-    REDWOOD = 2
+from .utils import Species
 
 
 class MixedStandSimulator:
@@ -51,32 +33,33 @@ class MixedStandSimulator:
     def __init__(self, setup, params):
         required_keys = ['state_init', 'landscape_dims', 'times']
 
-        for key in required_keys:
-            if key not in setup:
-                raise KeyError("Setup Parameter {0} not found!".format(key))
+        # Make sure required keys present
+        try:
+            self.setup = {k: setup[k] for k in required_keys}
+        except KeyError as err:
+            logging.exception("Missing required key!")
+            raise err
 
-        self.setup = {k: setup[k] for k in required_keys}
-
+        # Log if unnecessary keys present
         for key in setup:
             if key not in required_keys:
-                warnings.warn("Unused setup parameter: {0}".format(key))
+                logging.info("Unused setup parameter: %s", key)
 
         self.params = copy.deepcopy(params)
+
         self._linear_matrix = None
         self._inf_matrix = None
         self._indices = None
         self._space_weights = None
+        self._recruit_rates = None
         self.ncells = np.prod(self.setup['landscape_dims'])
+
+        # Object to store run results
         self.run = {
             'state': None,
             'control': None,
             'objective': None
         }
-
-    def print_msg(self, msg):
-        """Print message from class with class identifier."""
-        identifier = "[" + self.__class__.__name__ + "]"
-        print("{0:<20}{1}".format(identifier, msg))
 
     def save_run(self, filename):
         """Save run_data, control and run parameters to file."""
@@ -90,6 +73,8 @@ class MixedStandSimulator:
         with open(filename, "wb") as outfile:
             pickle.dump(dump_obj, outfile)
 
+        logging.debug("Saved run data to %s", filename)
+
     def load_run(self, filename):
         """Load run_data, control and run parameters."""
 
@@ -100,8 +85,12 @@ class MixedStandSimulator:
         self.setup = load_obj['setup']
         self.params = load_obj['params']
 
+        logging.debug("Loaded run data from %s", filename)
+
     def _initialise(self):
         """Initialise ready for simulation - set up initial conditions, matrices and rates."""
+
+        logging.debug("Starting initialisation")
 
         if len(self.setup['state_init']) == 15:
             # Uniform initialisation across landscape
@@ -110,11 +99,13 @@ class MixedStandSimulator:
             # User specified landscape initialisation
             # Check dimensions consistent
             if len(self.setup['state_init']) / 15 != self.ncells:
+                logging.error("Incorrect lenth of state initialisation array!")
                 raise ValueError("Incorrect length of state initialisation array!")
             state_init = self.setup['state_init']
 
         # Initialise rates s.t. if initial state was disease free, it is in dynamic equilibrium
         # Follows calculation in Cobb (2012)
+        # First find number in each state if disease free
         avg_state_init = np.sum(np.reshape(state_init, (self.ncells, 15)), axis=0) / self.ncells
         avg_df_state_init = np.array(
             [np.sum(avg_state_init[3*i:3*i+3]) for i in range(4)] +
@@ -126,10 +117,12 @@ class MixedStandSimulator:
                 self.params['space_tanoak'] = 0.25 * np.sum(
                     avg_df_state_init[:4]) / avg_df_state_init[:4]
         else:
+            # No tanoak - set space weights to zero
             self.params['space_tanoak'] = np.repeat(0.0, 4)
 
         # Recruitment rates:
         # Any recruitment rates that are nan in parameters are chosen to give dynamic equilibrium
+        # See online SI of Cobb (2012) for equations
         space_at_start = (1.0 - np.sum(self.params['space_tanoak'] * avg_df_state_init[:4]) -
                           self.params['space_bay'] * avg_df_state_init[4] -
                           self.params['space_redwood'] * avg_df_state_init[5])
@@ -154,9 +147,8 @@ class MixedStandSimulator:
         # Construct infection and transition matrices
         self._construct_matrices()
 
+        # For ease later arrays of indices to select particular host classes
         self._indices = {
-            'all_s_idx': np.array([15*loc+np.array([0, 3, 6, 9, 12, 14])
-                                   for loc in range(self.ncells)]).flatten(),
             'inf_s_idx': np.array(
                 [15*loc+np.arange(14, step=3) for loc in range(self.ncells)]).flatten(),
             'tan_s_idx': np.array(
@@ -167,19 +159,24 @@ class MixedStandSimulator:
                                      for loc in range(self.ncells)]).flatten(),
         }
 
+        # Create array of space weights for each state (len 15*ncells)
         self._space_weights = np.tile(np.append(
             np.repeat(self.params['space_tanoak'], 3),
-            [self.params['space_bay'],self.params['space_bay'], self.params['space_redwood']]),
-            self.ncells)
-        
+            [self.params['space_bay'], self.params['space_bay'], self.params['space_redwood']]),
+                                      self.ncells)
+
+        # Create array of recruitment rates for each state (len 15*ncells)
         self._recruit_rates = np.tile(np.append(
             np.repeat(self.params['recruit_tanoak'], 3),
-            [self.params['recruit_bay'],self.params['recruit_bay'], self.params['recruit_redwood']]),
-            self.ncells)
+            [self.params['recruit_bay'], self.params['recruit_bay'],
+             self.params['recruit_redwood']]), self.ncells)
 
+        # Return the initial state
         return state_init
 
     def _get_state_idx(self, species, age_class, location):
+        """Get index for particular host in state array."""
+
         if species == Species.TANOAK:
             index = 3*age_class
         elif species == Species.BAY:
@@ -195,13 +192,14 @@ class MixedStandSimulator:
     def _construct_matrices(self):
         """Construct matrices for calculation of equations RHS (linear parts and infection)."""
 
+        # Linear matrix A - terms linear in the state, i.e. dX = A*X for each location
         A = np.zeros((15, 15))
 
         # Resprouting
         i = self._get_state_idx(Species.TANOAK, 0, 0)
         for age_class in range(4):
             j = self._get_state_idx(Species.TANOAK, age_class, 0) + 1
-            A[i, j] += self.params['resprout_tanoak']*self.params['inf_mort_tanoak'][age_class]
+            A[i, j] += self.params['resprout_tanoak'] * self.params['inf_mort_tanoak'][age_class]
 
         # Mortality and recovery (tanoak)
         for age_class in range(4):
@@ -252,6 +250,10 @@ class MixedStandSimulator:
 
         self._linear_matrix = A
 
+        logging.info("Completed linear matrix intialisation")
+
+        # Infection matrix B. This is multiplied by infectious hosts to get change in susceptible
+        # hosts. i.e. dSus = B * Inf
         B = np.zeros((5*self.ncells, 5*self.ncells))
 
         for location in range(self.ncells):
@@ -259,11 +261,13 @@ class MixedStandSimulator:
             loc_coords = np.unravel_index(location, self.setup['landscape_dims'])
             adjacent_coords = []
 
+            # Can vary number of nearest neighbours - either 4 or 8
             if self.params['num_nn'] == 4:
                 for row_change in [-1, 1]:
                     for col_change in [0]:
                         if not (row_change == 0 and col_change == 0):
                             new_coord = np.add(loc_coords, (row_change, col_change))
+                            # Check inside domain:
                             check = (
                                 (new_coord[0] >= 0 and
                                  new_coord[0] < self.setup['landscape_dims'][0])
@@ -276,6 +280,7 @@ class MixedStandSimulator:
                     for col_change in [-1, 1]:
                         if not (row_change == 0 and col_change == 0):
                             new_coord = np.add(loc_coords, (row_change, col_change))
+                            # Check inside domain:
                             check = (
                                 (new_coord[0] >= 0 and
                                  new_coord[0] < self.setup['landscape_dims'][0])
@@ -289,6 +294,7 @@ class MixedStandSimulator:
                     for col_change in [-1, 0, 1]:
                         if not (row_change == 0 and col_change == 0):
                             new_coord = np.add(loc_coords, (row_change, col_change))
+                            # Check inside domain:
                             check = (
                                 (new_coord[0] >= 0 and
                                  new_coord[0] < self.setup['landscape_dims'][0])
@@ -306,6 +312,7 @@ class MixedStandSimulator:
             else:
                 adjacent_locs = []
 
+            # Infection of tanoak:
             for age_class in range(4):
                 for age_class2 in range(4):
                     B[5*location+age_class, 5*location+age_class2] += (
@@ -321,6 +328,7 @@ class MixedStandSimulator:
                     B[5*location+age_class, 5*loc2+4] += (
                         self.params['spore_between'] * self.params['inf_bay_to_tanoak'])
 
+            # Infection of bay:
             for age_class2 in range(4):
                 B[5*location+4, 5*location+age_class2] += (
                     self.params['spore_within'] * self.params['inf_tanoak_to_bay'])
@@ -336,11 +344,14 @@ class MixedStandSimulator:
 
         self._inf_matrix = B
 
+        logging.info("Completed infection matrix intialisation")
+
     def _get_recruit(self, state):
         """Return recruitment rates for given full state."""
 
         empty_space = self._get_space(state)
 
+        # Reduceat sums columns 0:12, 12:14, and 14: to give recruitment rates for each species
         recruit_rates = np.add.reduceat(
             np.reshape(self._recruit_rates * state, (self.ncells, 15)),
             [0, 12, 14], axis=1).flatten()
@@ -348,7 +359,7 @@ class MixedStandSimulator:
         return recruit_rates * np.repeat(empty_space, 3)
 
     def _get_space(self, state):
-        """Return space for given full state."""
+        """Return empty space for given full state."""
 
         space_occupied = np.sum(np.reshape(self._space_weights * state, (self.ncells, 15)), axis=1)
         empty_space = np.maximum(0, 1.0 - space_occupied)
@@ -391,7 +402,7 @@ class MixedStandSimulator:
         return integrand
 
     def _terminal_cost(self, state):
-        """Payoff term in objective function"""
+        """Payoff term in objective function - Healthy large tanoak"""
 
         state = np.sum(np.reshape(state, (self.ncells, 15)), axis=0)
 
@@ -401,28 +412,36 @@ class MixedStandSimulator:
 
         return payoff
 
-
     def state_deriv(self, time, state, control_func=None):
         """Return state derivative for 3 species model.
 
-        cull_function:      Function of time returning proportion of cull rate allocated to each
-                            state class.
-        treat_function:     Function of time returning proportion of treat rate allocated to
-                            vaccinate each tanoak age class.
+        control_function:   Function of time returning proportion of control rate allocated to each
+                            control method: rogue small tan
+                                            rogue large tan
+                                            rogue bay
+                                            thin small tan
+                                            thin large tan
+                                            thin bay
+                                            thin red
+                                            protect small tan
+                                            protect large tan.
         """
 
-        obj = state[-1]
+        # Get state without integrated objective value
         state = state[:-1]
 
         d_state = np.zeros_like(state)
 
+        # Linear part of dX
         for loc in range(self.ncells):
             d_state[15*loc:15*(loc+1)] += self._linear_matrix @ state[15*loc:15*(loc+1)]
 
+        # Recruitment rates
         recruit = self._get_recruit(state)
 
-        # TODO this matrix multiplication slowest calculation step currently - change to loop over
+        # TODO this matrix multiplication slowest calculation step currently - try looping over
         # locations as with linear matrix?
+        # Calculate force of infection:
         inf_force = np.matmul(self._inf_matrix, state[1+self._indices['inf_s_idx']])
 
         d_state[self._indices['recruit_idx']] += recruit
@@ -443,14 +462,6 @@ class MixedStandSimulator:
 
         if control_func is not None:
             control = control_func(time) * self.params.get('control_rate', 0.0)
-
-            # bay_tot = np.sum(state[12::15]) + np.sum(state[13::15])
-            # if bay_tot > 0.0:
-            #     control[3] = control[3] / bay_tot
-            # else:
-            #     control[3] = 0.0
-
-            # control[4] = np.minimum(control[4], 1000000000*(np.sum(state[14::15]) > 0))
 
             roguing = np.tile(
                 np.array([control[0], control[0], control[1], control[1], control[2]]), self.ncells)
@@ -478,6 +489,8 @@ class MixedStandSimulator:
 
         d_obj = self._objective_integrand(time, state, control)
 
+        logging.debug("Calculated state derivative at time %f", time)
+
         return np.append(d_state, [d_obj])
 
     def run_policy(self, control_policy=None, n_fixed_steps=None, obj_start=None):
@@ -490,6 +503,7 @@ class MixedStandSimulator:
         """
 
         state_init = self._initialise()
+        logging.info("Initialisation complete")
 
         if obj_start is None:
             obj_start = 0.0
@@ -499,12 +513,16 @@ class MixedStandSimulator:
         ode.set_initial_value(np.append(state_init, [obj_start]), self.setup['times'][0])
         ode.set_f_params(control_policy)
 
+        logging.info("Starting ODE run")
+
         ts = [self.setup['times'][0]]
         xs = [state_init]
         obj = [obj_start]
 
+        # Loop over times and advance ODE system
         for time in self.setup['times'][1:]:
             if n_fixed_steps is not None:
+                # Use fixed steps
                 t_old_int = ts[-1]
                 state_old_int = xs[-1]
                 for t_int in np.linspace(ts[-1], time, n_fixed_steps+2)[1:]:
@@ -525,19 +543,21 @@ class MixedStandSimulator:
                 ts.append(time)
 
             else:
+                # use adaptive step solver
                 if ode.successful():
                     ode.integrate(time)
                     ts.append(ode.t)
                     xs.append(ode.y[:-1])
                     obj.append(ode.y[-1])
                 else:
-                    pdb.set_trace()
+                    logging.error("ODE solver error!")
                     raise RuntimeError("ODE solver error!")
+
+        logging.info("ODE run completed")
 
         state = np.vstack(xs).T
 
         self.run['state'] = state
-
         if control_policy is None:
             self.run['control'] = None
         else:
@@ -545,109 +565,3 @@ class MixedStandSimulator:
         self.run['objective'] = self._terminal_cost(xs[-1]) + obj[-1]
 
         return state, self.run['objective'], obj
-
-class MixedStandAnimator:
-    """Plotting object for MixedStandSimulator results."""
-
-    def __init__(self, simulator):
-        self.simulator = simulator
-
-    @staticmethod
-    def _default_plot_func(state):
-        """Default plot proportion of hosts infected."""
-
-        total_inf = np.sum(state[1::3])
-        total = np.sum(state)
-        return total_inf / total
-
-    def make_animation(self, plot_function=None, video_length=10, save_file=None, **kwargs):
-        """Plot spatial animation of diseased proportion over time.
-
-        plot_function:  If specified this function takes current state of a single cell and returns
-                        the desired attribute to plot on the map. By default plots proportion of all
-                        hosts that are infected.
-        kwargs:         Keyword arguments passed to pcolormesh
-        """
-
-        if self.simulator.run['state'] is None:
-            raise RuntimeError("No run has been simulated!")
-
-        if plot_function is None:
-            plot_function = self._default_plot_func
-
-        run_data = interp1d(self.simulator.setup['times'], self.simulator.run['state'])
-        fps = 30
-        nframes = fps * video_length
-        times = np.linspace(
-            self.simulator.setup['times'][0], self.simulator.setup['times'][-1], nframes)
-
-        # Setup plotting data
-        dataset = np.zeros((nframes, *self.simulator.setup['landscape_dims']))
-        for i, time in enumerate(times):
-            dataset[i] = np.apply_along_axis(
-                plot_function, 1, run_data(time).reshape((self.simulator.ncells, 15))).reshape(
-                    self.simulator.setup['landscape_dims'])
-
-        fig = plt.figure()
-        ax = fig.add_subplot(111)
-        vmin = kwargs.pop('vmin', 0)
-        vmax = kwargs.pop('vmax', 1)
-
-        im = ax.pcolormesh(dataset[0, :, :], vmin=vmin, vmax=vmax, **kwargs)
-        fig.colorbar(im, ax=ax)
-        fig.tight_layout()
-
-        time_template = 'time = {0:.1f}'
-        time_text = ax.text(0.05, 0.055, time_template.format(times[0]), transform=ax.transAxes,
-                            bbox={'facecolor':'w', 'alpha':0.5, 'pad':5})
-        time_text.set_animated(True)
-
-        def update(frame_number):
-            im.set_array(dataset[frame_number].ravel())
-            time_text.set_text(time_template.format(times[frame_number]))
-
-            return im, time_text
-
-        im_ani = animation.FuncAnimation(fig, update, interval=1000*video_length/nframes,
-                                         frames=nframes, blit=True, repeat=True)
-
-        if save_file is not None:
-            Writer = animation.writers['ffmpeg']
-            writer = Writer(fps=fps, metadata=dict(artist='Me'), bitrate=1800, codec="h264")
-            im_ani.save(save_file+'.mp4', writer=writer, dpi=300)
-
-        return im_ani
-
-    def plot_hosts(self, ax=None, proportions=True, combine_ages=True, **kwargs):
-        """Plot simulator host numbers as a function of time."""
-
-        if self.simulator.run['state'] is None:
-            raise RuntimeError("No run has been simulated!")
-
-        if ax is None:
-            fig = plt.figure(111)
-            ax = fig.add_subplot(111)
-
-        ncells = np.product(self.simulator.setup['landscape_dims'])
-
-        return visualisation.plot_hosts(
-            self.simulator.setup['times'],
-            np.sum(np.reshape(self.simulator.run['state'], (ncells, 15, -1)), axis=0) / ncells,
-            ax=ax, combine_ages=combine_ages, **kwargs)
-
-    def plot_dpcs(self, ax=None, proportions=True, combine_ages=True, **kwargs):
-        """Plot simulator disease progress curves as a function of time."""
-
-        if self.simulator.run['state'] is None:
-            raise RuntimeError("No run has been simulated!")
-
-        if ax is None:
-            fig = plt.figure(111)
-            ax = fig.add_subplot(111)
-
-        ncells = np.product(self.simulator.setup['landscape_dims'])
-
-        return visualisation.plot_dpcs(
-            self.simulator.setup['times'],
-            np.sum(np.reshape(self.simulator.run['state'], (ncells, 15, -1)), axis=0) / ncells,
-            ax=ax, combine_ages=combine_ages, **kwargs)

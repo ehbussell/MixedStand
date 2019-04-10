@@ -1,13 +1,10 @@
 """Visualisation of results."""
 
-import pdb
-import os
 import numpy as np
-import matplotlib as mpl
 import matplotlib.pyplot as plt
-import mixed_stand_simulator as ms_sim
-import mixed_stand_approx as ms_approx
-import parameters
+from matplotlib import animation
+from scipy.interpolate import interp1d
+
 
 def plot_hosts(times, model_run, ax=None, combine_ages=True, proportions=True, **kwargs):
     """Plot host proportions.
@@ -102,7 +99,7 @@ def plot_control(times, control_policy, ax=None, labels=None, colors=None, **kwa
     if ax is None:
         fig = plt.figure(111)
         ax = fig.add_subplot(111)
-    
+
     order = np.array([3, 4, 5, 6, 0, 1, 2, 7, 8])
 
     if labels is None:
@@ -129,3 +126,109 @@ def plot_control(times, control_policy, ax=None, labels=None, colors=None, **kwa
     ax.stackplot(times, *all_controls, labels=labels, colors=colors, **kwargs)
 
     return ax
+
+class MixedStandAnimator:
+    """Plotting object for MixedStandSimulator results."""
+
+    def __init__(self, simulator):
+        self.simulator = simulator
+
+    @staticmethod
+    def _default_plot_func(state):
+        """Default plot proportion of hosts infected."""
+
+        total_inf = np.sum(state[1::3])
+        total = np.sum(state)
+        return total_inf / total
+
+    def make_animation(self, plot_function=None, video_length=10, save_file=None, **kwargs):
+        """Plot spatial animation of diseased proportion over time.
+
+        plot_function:  If specified this function takes current state of a single cell and returns
+                        the desired attribute to plot on the map. By default plots proportion of all
+                        hosts that are infected.
+        kwargs:         Keyword arguments passed to pcolormesh
+        """
+
+        if self.simulator.run['state'] is None:
+            raise RuntimeError("No run has been simulated!")
+
+        if plot_function is None:
+            plot_function = self._default_plot_func
+
+        run_data = interp1d(self.simulator.setup['times'], self.simulator.run['state'])
+        fps = 30
+        nframes = fps * video_length
+        times = np.linspace(
+            self.simulator.setup['times'][0], self.simulator.setup['times'][-1], nframes)
+
+        # Setup plotting data
+        dataset = np.zeros((nframes, *self.simulator.setup['landscape_dims']))
+        for i, time in enumerate(times):
+            dataset[i] = np.apply_along_axis(
+                plot_function, 1, run_data(time).reshape((self.simulator.ncells, 15))).reshape(
+                    self.simulator.setup['landscape_dims'])
+
+        fig = plt.figure()
+        ax = fig.add_subplot(111)
+        vmin = kwargs.pop('vmin', 0)
+        vmax = kwargs.pop('vmax', 1)
+
+        im = ax.pcolormesh(dataset[0, :, :], vmin=vmin, vmax=vmax, **kwargs)
+        fig.colorbar(im, ax=ax)
+        fig.tight_layout()
+
+        time_template = 'time = {0:.1f}'
+        time_text = ax.text(0.05, 0.055, time_template.format(times[0]), transform=ax.transAxes,
+                            bbox={'facecolor':'w', 'alpha':0.5, 'pad':5})
+        time_text.set_animated(True)
+
+        def update(frame_number):
+            im.set_array(dataset[frame_number].ravel())
+            time_text.set_text(time_template.format(times[frame_number]))
+
+            return im, time_text
+
+        im_ani = animation.FuncAnimation(fig, update, interval=1000*video_length/nframes,
+                                         frames=nframes, blit=True, repeat=True)
+
+        if save_file is not None:
+            Writer = animation.writers['ffmpeg']
+            writer = Writer(fps=fps, metadata=dict(artist='Me'), bitrate=1800, codec="h264")
+            im_ani.save(save_file+'.mp4', writer=writer, dpi=300)
+
+        return im_ani
+
+    def plot_hosts(self, ax=None, combine_ages=True, **kwargs):
+        """Plot simulator host numbers as a function of time."""
+
+        if self.simulator.run['state'] is None:
+            raise RuntimeError("No run has been simulated!")
+
+        if ax is None:
+            fig = plt.figure(111)
+            ax = fig.add_subplot(111)
+
+        ncells = np.product(self.simulator.setup['landscape_dims'])
+
+        return plot_hosts(
+            self.simulator.setup['times'],
+            np.sum(np.reshape(self.simulator.run['state'], (ncells, 15, -1)), axis=0) / ncells,
+            ax=ax, combine_ages=combine_ages, **kwargs)
+
+    def plot_dpcs(self, ax=None, combine_ages=True, **kwargs):
+        """Plot simulator disease progress curves as a function of time."""
+
+        if self.simulator.run['state'] is None:
+            raise RuntimeError("No run has been simulated!")
+
+        if ax is None:
+            fig = plt.figure(111)
+            ax = fig.add_subplot(111)
+
+        ncells = np.product(self.simulator.setup['landscape_dims'])
+
+        return plot_dpcs(
+            self.simulator.setup['times'],
+            np.sum(np.reshape(self.simulator.run['state'], (ncells, 15, -1)), axis=0) / ncells,
+            ax=ax, combine_ages=combine_ages, **kwargs)

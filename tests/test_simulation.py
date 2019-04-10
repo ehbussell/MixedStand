@@ -2,56 +2,19 @@
 
 import unittest
 import copy
+import logging
 import numpy as np
-import matplotlib.pyplot as plt
-import mixed_stand_simulator as ms_sim
-import parameters
+from mixed_stand_model import mixed_stand_simulator as ms_sim
+from mixed_stand_model import parameters
+from tests.utils import get_sis_params, ZERO_PARAMS
 
-ZERO_PARAMS = {
-    # Infection rates
-    'inf_tanoak_tanoak': np.array([0.0, 0.0, 0.0, 0.0]),
-    'inf_bay_to_bay': 0.0,
-    'inf_bay_to_tanoak': 0.0,
-    'inf_tanoak_to_bay': 0.0,
+# TODO add tests of objective calculation
 
-    # # Natural mortality rates
-    'nat_mort_tanoak': np.array([0.0, 0.0, 0.0, 0.0]),
-    'nat_mort_bay': 0.0,
-    'nat_mort_redwood': 0.0,
-
-    # Pathogen induced mortality rates
-    'inf_mort_tanoak': np.array([0.0, 0.0, 0.0, 0.0]),
-
-    # Tanoak age class transition rates
-    'trans_tanoak': np.array([0.0, 0.0, 0.0]),
-
-    # Recovery rates
-    'recov_tanoak': 0.0,
-    'recov_bay': 0.0,
-
-    # Seed recruitment rates
-    # Any nan values are set in initialisation to ensure dynamic equilibrium at start
-    'recruit_tanoak': np.array([0.0, 0.0, 0.0, 0.0]),
-    'recruit_bay': 0.0,
-    'recruit_redwood': 0.0,
-
-    # Proportion of spores deposited within cell
-    'spore_within': 1.0,
-    'spore_between': 0.0,
-    'num_nn': 4,
-
-    # Tanoak reprouting probability
-    'resprout_tanoak': 0.0,
-
-    # Relative measure of per-capita space used by each species
-    # Any nan values are set in initialisation to ensure dynamic equilibrium at start
-    'space_tanoak': np.full(4, 1.0),
-    'space_bay': 1.0,
-    'space_redwood': 1.0,
-}
 
 def sis_analytic(times, beta, mu, I0, N):
     """Analytic solution for SIS model: dI/dt = beta*I*(N-I) - mu * I"""
+
+    logging.info("Calculating analytic SIS solution.")
     A = np.exp((beta*N - mu) * times)
 
     return (beta*N - mu) * I0 * A / (beta*N - mu + beta*I0*(A - 1.0))
@@ -67,48 +30,7 @@ class TestNonSpatialDynamics(unittest.TestCase):
         I0 = 0.1
         N = 100
 
-        params = {
-            # Infection rates
-            'inf_tanoak_tanoak': np.array([beta, 0.0, 0.0, 0.0]),
-            'inf_bay_to_bay': 0.0,
-            'inf_bay_to_tanoak': 0.0,
-            'inf_tanoak_to_bay': 0.0,
-
-            # # Natural mortality rates
-            'nat_mort_tanoak': np.array([0.0, 0.0, 0.0, 0.0]),
-            'nat_mort_bay': 0.0,
-            'nat_mort_redwood': 0.0,
-
-            # Pathogen induced mortality rates
-            'inf_mort_tanoak': np.array([0.0, 0.0, 0.0, 0.0]),
-
-            # Tanoak age class transition rates
-            'trans_tanoak': np.array([0.0, 0.0, 0.0]),
-
-            # Recovery rates
-            'recov_tanoak': mu,
-            'recov_bay': 0.0,
-
-            # Seed recruitment rates
-            # Any nan values are set in initialisation to ensure dynamic equilibrium at start
-            'recruit_tanoak': np.array([0.0, 0.0, 0.0, 0.0]),
-            'recruit_bay': 0.0,
-            'recruit_redwood': 0.0,
-
-            # Proportion of spores deposited within cell
-            'spore_within': 1.0,
-            'spore_between': 0.0,
-            'num_nn': 4,
-
-            # Tanoak reprouting probability
-            'resprout_tanoak': 0.0,
-
-            # Relative measure of per-capita space used by each species
-            # Any nan values are set in initialisation to ensure dynamic equilibrium at start
-            'space_tanoak': np.full(4, 1.0),
-            'space_bay': 1.0,
-            'space_redwood': 1.0,
-        }
+        params = get_sis_params(beta, mu)
 
         state_init = np.zeros(15)
         state_init[0] = N - I0
@@ -121,7 +43,7 @@ class TestNonSpatialDynamics(unittest.TestCase):
         }
 
         simulator = ms_sim.MixedStandSimulator(setup, params)
-        simulator_results = simulator.run_policy()
+        simulator_results, *_ = simulator.run_policy()
 
         analytic_results = sis_analytic(setup['times'], beta, mu, I0, N)
 
@@ -129,12 +51,6 @@ class TestNonSpatialDynamics(unittest.TestCase):
         print(simulator_results[1, :])
         print(np.isclose(simulator_results[1, :], analytic_results, atol=1e-5))
         self.assertTrue(np.allclose(simulator_results[1, :], analytic_results, atol=1e-5))
-
-        fig = plt.figure()
-        ax = fig.add_subplot(111)
-        ax.plot(setup['times'], analytic_results)
-        ax.plot(setup['times'], simulator_results[1, :])
-        plt.show()
 
 class TestNonSpatialRates(unittest.TestCase):
     """Test calculations of state derivatives when system is non-spatial."""
@@ -172,7 +88,7 @@ class TestNonSpatialRates(unittest.TestCase):
         # Tanoak recruitment from single age class
         for i in range(4):
             state = np.array([0]*3*i + [0.01, 0.02, 0.03] + [0]*(9-3*i) + [0.04, 0.05, 0.06])
-            deriv = self.model.state_deriv(0.0, state)
+            deriv = self.model.state_deriv(0.0, np.append(state, 0))[:-1]
             test_deriv = np.array([
                 params['recruit_tanoak'][i] * np.sum(state[3*i:3*(i+1)]) *
                 (1.0 - np.sum(state))] + [0]*11)
@@ -181,7 +97,7 @@ class TestNonSpatialRates(unittest.TestCase):
 
         # Tanoak recruitment from all age classes
         state = np.random.rand(15) / 15
-        deriv = self.model.state_deriv(0.0, state)
+        deriv = self.model.state_deriv(0.0, np.append(state, 0))[:-1]
         test_deriv = np.zeros(12)
         for i in range(4):
             test_deriv[0] += (params['recruit_tanoak'][i] * np.sum(state[3*i:3*(i+1)]) *
@@ -222,7 +138,7 @@ class TestNonSpatialRates(unittest.TestCase):
 
         state = np.random.rand(15)
         expected_deriv = -total_mort * state
-        deriv = self.model.state_deriv(0.0, state)
+        deriv = self.model.state_deriv(0.0, np.append(state, 0))[:-1]
         print("Mortality rates:", deriv, expected_deriv)
         self.assertTrue(np.allclose(deriv, expected_deriv))
 
@@ -251,7 +167,7 @@ class TestNonSpatialRates(unittest.TestCase):
             expected_deriv[0] += (
                 params['inf_mort_tanoak'][i] * params['resprout_tanoak'] * state[3*i+1])
 
-        deriv = self.model.state_deriv(0.0, state)
+        deriv = self.model.state_deriv(0.0, np.append(state, 0))[:-1]
         print("Resprout rates:", deriv, expected_deriv)
         self.assertTrue(np.allclose(deriv, expected_deriv))
 
@@ -277,7 +193,7 @@ class TestNonSpatialRates(unittest.TestCase):
                 expected_deriv[3*i+1] += (params['trans_tanoak'][i-1] * state[3*(i - 1)+1])
                 expected_deriv[3*i+2] += (params['trans_tanoak'][i-1] * state[3*(i - 1)+2])
 
-        deriv = self.model.state_deriv(0.0, state)
+        deriv = self.model.state_deriv(0.0, np.append(state, 0))[:-1]
         print("Age class transition rates:", deriv, expected_deriv)
         self.assertTrue(np.allclose(deriv, expected_deriv))
 
@@ -301,7 +217,7 @@ class TestNonSpatialRates(unittest.TestCase):
         expected_deriv[13] -= params['recov_bay'] * state[13]
         expected_deriv[12] += params['recov_bay'] * state[13]
 
-        deriv = self.model.state_deriv(0.0, state)
+        deriv = self.model.state_deriv(0.0, np.append(state, 0))[:-1]
         print("Recovery rates:", deriv, expected_deriv)
         self.assertTrue(np.allclose(deriv, expected_deriv))
 
@@ -337,7 +253,7 @@ class TestNonSpatialRates(unittest.TestCase):
         expected_deriv[12] -= inf_rate
         expected_deriv[13] += inf_rate
 
-        deriv = self.model.state_deriv(0.0, state)
+        deriv = self.model.state_deriv(0.0, np.append(state, 0))[:-1]
         print("Infection rates:", deriv, expected_deriv)
         self.assertTrue(np.allclose(deriv, expected_deriv))
 
@@ -429,7 +345,7 @@ class TestNonSpatialRates(unittest.TestCase):
         expected_deriv[12] -= inf_rate
         expected_deriv[13] += inf_rate
 
-        deriv = self.model.state_deriv(0.0, state)
+        deriv = self.model.state_deriv(0.0, np.append(state, 0))[:-1]
         print("Infection rates:", deriv, expected_deriv)
         self.assertTrue(np.allclose(deriv, expected_deriv))
 
@@ -497,7 +413,7 @@ class TestSpatialInfection(unittest.TestCase):
         expected_deriv[start_idx+12] -= inf_rate
         expected_deriv[start_idx+13] += inf_rate
 
-        deriv = self.model.state_deriv(0.0, state)
+        deriv = self.model.state_deriv(0.0, np.append(state, 0))[:-1]
         print("Infection rates:", deriv, expected_deriv)
         self.assertTrue(np.allclose(deriv, expected_deriv))
 
@@ -543,6 +459,6 @@ class TestSpatialInfection(unittest.TestCase):
             expected_deriv[15*cell+12] -= inf_rate
             expected_deriv[15*cell+13] += inf_rate
 
-        deriv = self.model.state_deriv(0.0, state)
+        deriv = self.model.state_deriv(0.0, np.append(state, 0))[:-1]
         print("Infection rates:", deriv, expected_deriv)
         self.assertTrue(np.allclose(deriv, expected_deriv))
