@@ -1,20 +1,9 @@
 """Methods for running MPC strategies."""
 
 import argparse
-from enum import IntEnum
-import copy
-import warnings
 import pdb
 import pickle
 import numpy as np
-from scipy.interpolate import interp1d
-from scipy import integrate
-import matplotlib.pyplot as plt
-from matplotlib import animation
-import visualisation
-import mixed_stand_simulator as ms_sim
-import mixed_stand_approx as ms_approx
-import parameters
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
@@ -82,6 +71,8 @@ class Controller:
 
         all_run_data[:, 0] = state_init
 
+        sim_obj = [0.0]
+
         while current_start < end_time:
             current_times = np.arange(current_start, current_end+time_step, step=time_step)
 
@@ -99,7 +90,8 @@ class Controller:
             simulation_times = np.arange(
                 current_start, np.minimum(next_update, end_time)+time_step, step=time_step)
             self.simulator.setup['times'] = simulation_times
-            run_data = self.simulator.run_policy(control_policy=current_control, n_fixed_steps=None)
+            sim_state, sim_obj_final, sim_obj = self.simulator.run_policy(
+                control_policy=current_control, n_fixed_steps=None, obj_start=sim_obj[-1])
 
             current_start = next_update
             next_update += update_period
@@ -107,10 +99,10 @@ class Controller:
             if rolling_horz:
                 current_end += update_period
 
-            state_init = run_data[:, -1]
+            state_init = sim_state[:, -1]
 
             all_times.extend(simulation_times[1:])
-            all_run_data = np.hstack((all_run_data, run_data[:, 1:]))
+            all_run_data = np.hstack((all_run_data, sim_state[:, 1:]))
             all_control_data = np.hstack((
                 all_control_data, np.array([current_control(t) for t in simulation_times[:-1]]).T))
 
@@ -121,7 +113,7 @@ class Controller:
         self.run_state = all_run_data
         self.run_control = all_control_data
 
-        return all_times, all_run_data, all_control_data
+        return all_times, all_run_data, all_control_data, sim_obj_final
 
     def save_optimisation(self, filename):
         """Save control optimisation to file."""

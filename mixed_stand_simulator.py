@@ -480,7 +480,7 @@ class MixedStandSimulator:
 
         return np.append(d_state, [d_obj])
 
-    def run_policy(self, control_policy=None, n_fixed_steps=None):
+    def run_policy(self, control_policy=None, n_fixed_steps=None, obj_start=None):
         """Run forward simulation using a given control policy.
 
         Function control_policy(t, X) returns list of budget allocations for each control
@@ -491,14 +491,17 @@ class MixedStandSimulator:
 
         state_init = self._initialise()
 
+        if obj_start is None:
+            obj_start = 0.0
+
         ode = integrate.ode(self.state_deriv)
         ode.set_integrator('lsoda', nsteps=1000, atol=1e-10, rtol=1e-8)
-        ode.set_initial_value(np.append(state_init, [0.0]), self.setup['times'][0])
+        ode.set_initial_value(np.append(state_init, [obj_start]), self.setup['times'][0])
         ode.set_f_params(control_policy)
 
         ts = [self.setup['times'][0]]
         xs = [state_init]
-        obj = [0.0]
+        obj = [obj_start]
 
         for time in self.setup['times'][1:]:
             if n_fixed_steps is not None:
