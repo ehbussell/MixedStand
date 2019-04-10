@@ -6,18 +6,11 @@ import logging
 import numpy as np
 from mixed_stand_model import mixed_stand_simulator as ms_sim
 from mixed_stand_model import parameters
-from tests.utils import get_sis_params, ZERO_PARAMS
+from tests.utils import get_sis_params, sis_analytic, ZERO_PARAMS
 
 # TODO add tests of objective calculation
+# TODO add tests for vaccine decay
 
-
-def sis_analytic(times, beta, mu, I0, N):
-    """Analytic solution for SIS model: dI/dt = beta*I*(N-I) - mu * I"""
-
-    logging.info("Calculating analytic SIS solution.")
-    A = np.exp((beta*N - mu) * times)
-
-    return (beta*N - mu) * I0 * A / (beta*N - mu + beta*I0*(A - 1.0))
 
 class TestNonSpatialDynamics(unittest.TestCase):
     """Test accuracy of simulator in non-spatial conditions."""

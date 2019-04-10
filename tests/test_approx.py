@@ -4,17 +4,14 @@ import unittest
 import copy
 import numpy as np
 import matplotlib.pyplot as plt
-import mixed_stand_approx as ms_approx
-import parameters
-from tests import test_simulation as test_sim
+
+from mixed_stand_model import mixed_stand_approx as ms_approx
+from mixed_stand_model import parameters
+from tests.utils import get_sis_params, sis_analytic, ZERO_PARAMS
 
 # TODO add tests of objective calculation
+# TODO add tests for vaccine decay
 
-def sis_analytic(times, beta, mu, I0, N):
-    """Analytic solution for SIS model: dI/dt = beta*I*(N-I) - mu * I"""
-    A = np.exp((beta*N - mu) * times)
-
-    return (beta*N - mu) * I0 * A / (beta*N - mu + beta*I0*(A - 1.0))
 
 class TestNonSpatialDynamics(unittest.TestCase):
     """Test accuracy of approximate model in non-spatial conditions."""
@@ -27,48 +24,7 @@ class TestNonSpatialDynamics(unittest.TestCase):
         I0 = 0.1
         N = 100
 
-        params = {
-            # Infection rates
-            'inf_tanoak_tanoak': np.array([beta, 0.0, 0.0, 0.0]),
-            'inf_bay_to_bay': 0.0,
-            'inf_bay_to_tanoak': 0.0,
-            'inf_tanoak_to_bay': 0.0,
-
-            # # Natural mortality rates
-            'nat_mort_tanoak': np.array([0.0, 0.0, 0.0, 0.0]),
-            'nat_mort_bay': 0.0,
-            'nat_mort_redwood': 0.0,
-
-            # Pathogen induced mortality rates
-            'inf_mort_tanoak': np.array([0.0, 0.0, 0.0, 0.0]),
-
-            # Tanoak age class transition rates
-            'trans_tanoak': np.array([0.0, 0.0, 0.0]),
-
-            # Recovery rates
-            'recov_tanoak': mu,
-            'recov_bay': 0.0,
-
-            # Seed recruitment rates
-            # Any nan values are set in initialisation to ensure dynamic equilibrium at start
-            'recruit_tanoak': np.array([0.0, 0.0, 0.0, 0.0]),
-            'recruit_bay': 0.0,
-            'recruit_redwood': 0.0,
-
-            # Proportion of spores deposited within cell
-            'spore_within': 1.0,
-            'spore_between': 0.0,
-            'num_nn': 4,
-
-            # Tanoak reprouting probability
-            'resprout_tanoak': 0.0,
-
-            # Relative measure of per-capita space used by each species
-            # Any nan values are set in initialisation to ensure dynamic equilibrium at start
-            'space_tanoak': np.full(4, 1.0),
-            'space_bay': 1.0,
-            'space_redwood': 1.0,
-        }
+        params = get_sis_params(beta, mu)
 
         state_init = np.zeros(15)
         state_init[0] = N - I0
@@ -83,7 +39,7 @@ class TestNonSpatialDynamics(unittest.TestCase):
         inf_rates[0] = beta
 
         model = ms_approx.MixedStandApprox(setup, params, inf_rates)
-        model_results, _ = model.run_policy(None)
+        model_results, *_ = model.run_policy(None)
 
         analytic_results = sis_analytic(setup['times'], beta, mu, I0, N)
 
@@ -91,12 +47,6 @@ class TestNonSpatialDynamics(unittest.TestCase):
         print(model_results[1, :])
         print(np.isclose(model_results[1, :], analytic_results, atol=1e-5))
         self.assertTrue(np.allclose(model_results[1, :], analytic_results, atol=1e-5))
-
-        fig = plt.figure()
-        ax = fig.add_subplot(111)
-        ax.plot(setup['times'], analytic_results)
-        ax.plot(setup['times'], model_results[1, :])
-        plt.show()
 
 class TestNonSpatialRates(unittest.TestCase):
     """Test calculations of state derivatives when system is non-spatial."""
@@ -111,12 +61,12 @@ class TestNonSpatialRates(unittest.TestCase):
             'times': np.linspace(0, 100, 101)
         }
 
-        self.model = ms_approx.MixedStandApprox(setup, test_sim.ZERO_PARAMS, np.zeros(7))
+        self.model = ms_approx.MixedStandApprox(setup, ZERO_PARAMS, np.zeros(7))
 
     def test_recruit(self):
         """Test recruitment rates."""
 
-        params = copy.deepcopy(test_sim.ZERO_PARAMS)
+        params = copy.deepcopy(ZERO_PARAMS)
         params['recruit_tanoak'] = np.random.rand(4)
         params['recruit_bay'] = np.random.rand()
         params['recruit_redwood'] = np.random.rand()
@@ -157,7 +107,7 @@ class TestNonSpatialRates(unittest.TestCase):
     def test_mortality(self):
         """Test mortality rates."""
 
-        params = copy.deepcopy(test_sim.ZERO_PARAMS)
+        params = copy.deepcopy(ZERO_PARAMS)
         params['nat_mort_tanoak'] = np.random.rand(4)
         params['nat_mort_bay'] = np.random.rand()
         params['nat_mort_redwood'] = np.random.rand()
@@ -182,7 +132,7 @@ class TestNonSpatialRates(unittest.TestCase):
     def test_resprout(self):
         """Test resprouting rates of tanoak."""
 
-        params = copy.deepcopy(test_sim.ZERO_PARAMS)
+        params = copy.deepcopy(ZERO_PARAMS)
         params['inf_mort_tanoak'] = np.random.rand(4)
         params['resprout_tanoak'] = np.random.rand()
 
@@ -210,7 +160,7 @@ class TestNonSpatialRates(unittest.TestCase):
     def test_age_transitions(self):
         """Test rates of age class transitions in tanoak."""
 
-        params = copy.deepcopy(test_sim.ZERO_PARAMS)
+        params = copy.deepcopy(ZERO_PARAMS)
         params['trans_tanaok'] = np.random.rand(3)
 
         self.model.params = params
@@ -235,7 +185,7 @@ class TestNonSpatialRates(unittest.TestCase):
     def test_recovery(self):
         """Test rates of recovery."""
 
-        params = copy.deepcopy(test_sim.ZERO_PARAMS)
+        params = copy.deepcopy(ZERO_PARAMS)
         params['recov_tanoak'] = np.random.rand()
         params['recov_bay'] = np.random.rand()
 
@@ -258,7 +208,7 @@ class TestNonSpatialRates(unittest.TestCase):
     def test_infection(self):
         """Test rates of infection."""
 
-        params = copy.deepcopy(test_sim.ZERO_PARAMS)
+        params = copy.deepcopy(ZERO_PARAMS)
         params['inf_tanoak_tanoak'] = np.random.rand(4)
         params['inf_bay_to_bay'] = np.random.rand()
         params['inf_bay_to_tanoak'] = np.random.rand()
@@ -297,7 +247,7 @@ class TestNonSpatialRates(unittest.TestCase):
     def test_all_rates(self):
         """Test all rates together."""
 
-        params = copy.deepcopy(test_sim.ZERO_PARAMS)
+        params = copy.deepcopy(ZERO_PARAMS)
 
         params['inf_tanoak_tanoak'] = np.random.rand(4)
         params['inf_bay_to_bay'] = np.random.rand()
