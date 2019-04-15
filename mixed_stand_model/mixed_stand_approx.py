@@ -17,6 +17,8 @@ from scipy import integrate
 from scipy.interpolate import interp1d
 import bocop_utils
 
+from . import utils
+
 
 class MixedStandApprox:
     """
@@ -182,36 +184,6 @@ class MixedStandApprox:
             logging.info("Setting initial state directly")
             self.setup['state_init'] = state_init
 
-    def _objective_integrand(self, time, state, control):
-        """Integrand of objective function, including control costs and diversity costs."""
-
-        props = np.divide(np.array([np.sum(state[0:6]), np.sum(state[6:12]),
-                                    state[12] + state[13], state[14]]),
-                          np.sum(state[0:15]), out=np.zeros(4), where=(np.sum(state[0:15]) > 0.0))
-        div_cost = np.sum(props * np.log(props, out=np.zeros_like(props), where=(props > 0.0)))
-
-        integrand = np.exp(- self.params.get('discount_rate', 0.0) * time) * (
-            self.params.get('cull_cost', 0.0) * self.params.get('control_rate', 0.0) * (
-                control[0] * (state[1] + state[4]) + control[1] * (state[7] + state[10]) +
-                control[2] * state[13] + control[3] * np.sum(state[0:6]) +
-                control[4] * np.sum(state[6:12]) + control[5] * (state[12] + state[13]) +
-                control[6] * state[14]
-            ) + self.params.get('protect_cost', 0.0) * self.params.get('control_rate', 0.0) * (
-                control[7] * (state[0] + state[3]) + control[8] * (state[6] + state[9])
-            ) + self.params.get('div_cost', 0.0) * div_cost
-        )
-
-        return integrand
-
-    def _terminal_cost(self, state):
-        """Payoff term in objective function"""
-
-        payoff = - self.params.get('payoff_factor', 0.0) * np.exp(
-            - self.params.get('discount_rate', 0.0) * self.setup['times'][-1]) * (
-                state[6] + state[8] + state[9] + state[11])
-
-        return payoff
-
     def state_deriv(self, time, state, control_func=None):
         """Return state derivative for 3 species model, including integrated objective function.
 
@@ -323,7 +295,7 @@ class MixedStandApprox:
             control = np.zeros(9)
 
         # Objective function
-        d_state[-1] = self._objective_integrand(time, state, control)
+        d_state[-1] = utils.objective_integrand(time, state, control, self.params)
 
         return d_state
 
@@ -389,7 +361,7 @@ class MixedStandApprox:
             self.run['control'] = None
         else:
             self.run['control'] = np.array([control_policy(t) for t in self.setup['times']]).T
-        self.run['objective'] = self._terminal_cost(xs[-1]) + obj[-1]
+        self.run['objective'] = utils.objective_payoff(ts[-1], xs[-1], self.params) + obj[-1]
 
         return state, self.run['objective'], obj
 
