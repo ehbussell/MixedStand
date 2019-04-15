@@ -15,19 +15,10 @@ def objective_integrand(time, state, control, params):
     integrand = 0.0
 
     div_cost = params.get('div_cost', 0.0)
-    cull_cost = params.get('cull_cost', 0.0)
-    protect_cost = params.get('protect_cost', 0.0)
-
-    rogue_rate = params.get('rogue_rate', 0.0)
-    thin_rate = params.get('thin_rate', 0.0)
-    protect_rate = params.get('protect_rate', 0.0)
-
-    if div_cost == cull_cost == protect_cost == 0:
-        return integrand
-
-    state = np.sum(np.reshape(state, (-1, 15)), axis=0)
 
     if div_cost != 0.0:
+        state = np.sum(np.reshape(state, (-1, 15)), axis=0)
+
         props = np.divide(np.array([np.sum(state[0:6]), np.sum(state[6:12]),
                                     state[12] + state[13], state[14]]),
                           np.sum(state[0:15]), out=np.zeros(4),
@@ -35,24 +26,6 @@ def objective_integrand(time, state, control, params):
 
         integrand += div_cost * np.sum(
             props * np.log(props, out=np.zeros_like(props), where=(props > 0.0)))
-
-    if cull_cost != 0.0:
-        integrand += (
-            cull_cost * (
-                rogue_rate * control[0] * (state[1] + state[4]) +
-                rogue_rate * control[1] * (state[7] + state[10]) +
-                rogue_rate * control[2] * state[13] +
-                thin_rate * control[3] * np.sum(state[0:6]) +
-                thin_rate * control[4] * np.sum(state[6:12]) +
-                thin_rate * control[5] * (state[12] + state[13]) +
-                thin_rate * control[6] * state[14]
-            )
-        )
-
-    if protect_cost != 0.0:
-        integrand += (
-            protect_cost * protect_rate *
-            (control[7] * (state[0] + state[3]) + control[8] * (state[6] + state[9])))
 
     integrand *= np.exp(- params.get('discount_rate', 0.0) * time)
 

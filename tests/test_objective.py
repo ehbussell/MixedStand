@@ -47,11 +47,6 @@ class TestObjCalculation(unittest.TestCase):
         control = np.random.rand(9)
         params = {
             'div_cost': np.random.rand(),
-            'cull_cost': np.random.rand(),
-            'protect_cost': np.random.rand(),
-            'rogue_rate': np.random.rand(),
-            'thin_rate': np.random.rand(),
-            'protect_rate': np.random.rand(),
             'discount_rate': np.random.rand(),
         }
 
@@ -63,19 +58,7 @@ class TestObjCalculation(unittest.TestCase):
                                 np.sum(state[14]) / np.sum(state)])
 
         expected_integrand = np.exp(-params['discount_rate']*time) * (
-            params['div_cost'] * np.sum(state_props * np.log(state_props)) +
-            params['cull_cost'] * (
-                params['rogue_rate'] * control[0] * (state[1] + state[4]) +
-                params['rogue_rate'] * control[1] * (state[7] + state[10]) +
-                params['rogue_rate'] * control[2] * (state[13]) +
-                params['thin_rate'] * control[3] * np.sum(state[0:6]) +
-                params['thin_rate'] * control[4] * np.sum(state[6:12]) +
-                params['thin_rate'] * control[5] * np.sum(state[12:14]) +
-                params['thin_rate'] * control[6] * state[14]) +
-            params['protect_cost'] * params['protect_rate'] * (
-                control[7] * (state[0] + state[3]) +
-                control[8] * (state[6] + state[9]))
-            )
+            params['div_cost'] * np.sum(state_props * np.log(state_props)))
 
         self.assertEqual(integrand, expected_integrand)
 
@@ -93,18 +76,6 @@ class TestObjCalculation(unittest.TestCase):
                                 np.sum(state[14]) / np.sum(state)])
 
         expected_integrand = np.exp(-params['discount_rate']*time) * (
-            params['div_cost'] * np.sum(state_props * np.log(state_props)) +
-            params['cull_cost'] * (
-                params['rogue_rate'] * control[0] * (state[1] + state[4]) +
-                params['rogue_rate'] * control[1] * (state[7] + state[10]) +
-                params['rogue_rate'] * control[2] * (state[13]) +
-                params['thin_rate'] * control[3] * np.sum(state[0:6]) +
-                params['thin_rate'] * control[4] * np.sum(state[6:12]) +
-                params['thin_rate'] * control[5] * np.sum(state[12:14]) +
-                params['thin_rate'] * control[6] * state[14]) +
-            params['protect_cost'] * params['protect_rate'] * (
-                control[7] * (state[0] + state[3]) +
-                control[8] * (state[6] + state[9]))
-            )
+            params['div_cost'] * np.sum(state_props * np.log(state_props)))
 
         self.assertEqual(integrand, expected_integrand)
