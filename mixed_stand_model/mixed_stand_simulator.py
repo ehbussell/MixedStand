@@ -104,47 +104,6 @@ class MixedStandSimulator:
                 raise ValueError("Incorrect length of state initialisation array!")
             state_init = self.setup['state_init']
 
-        # Initialise rates s.t. if initial state was disease free, it is in dynamic equilibrium
-        # Follows calculation in Cobb (2012)
-        # First find number in each state if disease free
-        avg_state_init = np.sum(np.reshape(state_init, (self.ncells, 15)), axis=0) / self.ncells
-        avg_df_state_init = np.array(
-            [np.sum(avg_state_init[3*i:3*i+3]) for i in range(4)] +
-            [avg_state_init[12] + avg_state_init[13]] + [avg_state_init[14]])
-
-        # Space weights:
-        if np.all(avg_df_state_init[:4] > 0):
-            if np.all(np.isnan(self.params['space_tanoak'])):
-                self.params['space_tanoak'] = 0.25 * np.sum(
-                    avg_df_state_init[:4]) / avg_df_state_init[:4]
-        else:
-            # No tanoak - set space weights to zero
-            self.params['space_tanoak'] = np.repeat(0.0, 4)
-
-        # Recruitment rates:
-        # Any recruitment rates that are nan in parameters are chosen to give dynamic equilibrium
-        # See online SI of Cobb (2012) for equations
-        space_at_start = (1.0 - np.sum(self.params['space_tanoak'] * avg_df_state_init[:4]) -
-                          self.params['space_bay'] * avg_df_state_init[4] -
-                          self.params['space_redwood'] * avg_df_state_init[5])
-
-        if np.isnan(self.params['recruit_bay']):
-            self.params['recruit_bay'] = self.params['nat_mort_bay'] / space_at_start
-
-        if np.isnan(self.params['recruit_redwood']):
-            self.params['recruit_redwood'] = self.params['nat_mort_redwood'] / space_at_start
-
-        if np.isnan(self.params['recruit_tanoak'][0]):
-            A2 = self.params['trans_tanoak'][0] / (
-                self.params['trans_tanoak'][1] + self.params['nat_mort_tanoak'][1])
-            A3 = A2 * self.params['trans_tanoak'][1] / (
-                self.params['trans_tanoak'][2] + self.params['nat_mort_tanoak'][2])
-            A4 = A3 * self.params['trans_tanoak'][2] / self.params['nat_mort_tanoak'][3]
-
-            self.params['recruit_tanoak'][0] = (
-                (self.params['trans_tanoak'][0] + self.params['nat_mort_tanoak'][0]) /
-                space_at_start - np.sum(self.params['recruit_tanoak'][1:] * np.array([A2, A3, A4])))
-
         # Construct infection and transition matrices
         self._construct_matrices()
 

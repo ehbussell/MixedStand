@@ -51,50 +51,6 @@ class MixedStandApprox:
 
         self.params = copy.deepcopy(params)
 
-        logging.info("Starting initialisation")
-
-        # If necessary initialise space weights and recruitment rates to give dynamic equilibrium
-        # Follows calculation in Cobb (2012)
-        # First find disease free state:
-        df_state_init = np.array(
-            [np.sum(self.setup['state_init'][3*i:3*i+3]) for i in range(4)] +
-            [self.setup['state_init'][12] + self.setup['state_init'][13]] +
-            [self.setup['state_init'][14]])
-
-        # Space weights:
-        if np.all(df_state_init[:4] > 0):
-            if np.all(np.isnan(self.params['space_tanoak'])):
-                self.params['space_tanoak'] = 0.25 * np.sum(
-                    df_state_init[:4]) / df_state_init[:4]
-        else:
-            self.params['space_tanoak'] = np.repeat(0.0, 4)
-
-        # Recruitment rates
-        # Any recruitment rates that are nan in parameters are chosen to give dynamic equilibrium
-        # See online SI of Cobb (2012) for equations
-        space_at_start = (1.0 - np.sum(self.params['space_tanoak'] * df_state_init[:4]) -
-                          self.params['space_bay'] * df_state_init[4] -
-                          self.params['space_redwood'] * df_state_init[5])
-
-        if np.isnan(self.params['recruit_bay']):
-            self.params['recruit_bay'] = self.params['nat_mort_bay'] / space_at_start
-
-        if np.isnan(self.params['recruit_redwood']):
-            self.params['recruit_redwood'] = self.params['nat_mort_redwood'] / space_at_start
-
-        if np.isnan(self.params['recruit_tanoak'][0]):
-            A2 = self.params['trans_tanoak'][0] / (
-                self.params['trans_tanoak'][1] + self.params['nat_mort_tanoak'][1])
-            A3 = A2 * self.params['trans_tanoak'][1] / (
-                self.params['trans_tanoak'][2] + self.params['nat_mort_tanoak'][2])
-            A4 = A3 * self.params['trans_tanoak'][2] / self.params['nat_mort_tanoak'][3]
-
-            self.params['recruit_tanoak'][0] = (
-                (self.params['trans_tanoak'][0] + self.params['nat_mort_tanoak'][0]) /
-                space_at_start - np.sum(self.params['recruit_tanoak'][1:] * np.array([A2, A3, A4])))
-
-        logging.info("Completed initialisation")
-
         if isinstance(fit, dict):
             logging.info("Getting beta values from dictionary")
             self.beta = np.zeros(7)
