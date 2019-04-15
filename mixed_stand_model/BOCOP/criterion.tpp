@@ -29,7 +29,7 @@
 #include "header_criterion"
 {
 	// Objective function
-	criterion = final_state[15] - constants[42] * exp(- constants[41] * final_time) * (
+	criterion = final_state[15] - constants[45] * exp(- constants[44] * final_time) * (
 		final_state[6] + final_state[8] + final_state[9] + final_state[11]);
 }
 

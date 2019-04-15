@@ -4,8 +4,9 @@ import unittest
 from nose.plugins.attrib import attr
 import numpy as np
 import matplotlib.pyplot as plt
-import mixed_stand_approx as ms_approx
-import parameters
+from mixed_stand_model import mixed_stand_approx as ms_approx
+from mixed_stand_model import parameters
+from mixed_stand_model import visualisation
 
 @attr('slow')
 class TestOptimiser(unittest.TestCase):
@@ -32,44 +33,42 @@ class TestOptimiser(unittest.TestCase):
         self.params['inf_bay_to_bay'] = beta[6]
         self.params['payoff_factor'] = 1.0
         self.params['treat_eff'] = 0.75
+        self.params['max_budget'] = 100
 
         self.approx_model = ms_approx.MixedStandApprox(setup, self.params, beta)
 
     def test_optimiser_no_control(self):
         """Test BOCOP optimisation under no control."""
 
-        approx_model_run, approx_obj = self.approx_model.run_policy(None)
+        approx_model_run, *_ = self.approx_model.run_policy(None)
 
-        bocop_state_t, _, exit_text = self.approx_model.optimise(verbose=True)
+        approx_model_run = approx_model_run[0:15]
+
+        bocop_run, _, exit_text = self.approx_model.optimise(verbose=True)
+        bocop_run = bocop_run[0:15]
 
         self.assertTrue(exit_text == "Optimal Solution Found." or
                         exit_text == "Solved To Acceptable Level.")
 
-        bocop_run = np.array([bocop_state_t(t)[:-1] for t in self.approx_model.setup['times']]).T
+        times = self.approx_model.setup['times']
 
         fig = plt.figure()
         ax = fig.add_subplot(111)
-        self.approx_model.plot(ax=ax)
+        visualisation.plot_hosts(times, approx_model_run, ax=ax, proportions=False)
 
-        host_totals = np.sum(bocop_run, axis=0)
-        times = self.approx_model.setup['times']
+        small_tanoak = np.sum(bocop_run[0:6, :], axis=0)
+        large_tanoak = np.sum(bocop_run[6:12, :], axis=0)
+        bay = np.sum(bocop_run[12:14, :], axis=0)
+        redwood = bocop_run[14, :]
 
-        small_tanoak_sus = np.sum(bocop_run[[0, 3], :], axis=0) / host_totals
-        large_tanoak_sus = np.sum(bocop_run[[6, 9], :], axis=0) / host_totals
-        small_tanoak_inf = np.sum(bocop_run[[1, 4], :], axis=0) / host_totals
-        large_tanoak_inf = np.sum(bocop_run[[7, 10], :], axis=0) / host_totals
+        cmap = plt.get_cmap("tab20c")
+        colours = [cmap(2.5*0.05), cmap(0.5*0.05), cmap(8.5*0.05), cmap(4.5*0.05)]
 
-        bay_sus = bocop_run[12, :] / host_totals
-        bay_inf = bocop_run[13, :] / host_totals
-        redwood = bocop_run[14, :] / host_totals
-
-        ax.plot(times, small_tanoak_sus + small_tanoak_inf, 'kx', label="Small tanoak")
-        ax.plot(times, large_tanoak_sus + large_tanoak_inf, 'kx', label="Large tanoak")
-        ax.plot(times, bay_sus+bay_inf, 'bx', label="Bay")
-        ax.plot(times, bay_inf, 'bx', label="Bay I")
-        ax.plot(times, redwood, 'rx', label="Redwood")
-        ax.plot(times, small_tanoak_inf, 'rx', label="Small tanoak I", alpha=0.3)
-        ax.plot(times, large_tanoak_inf, 'rx', label="Large tanoak I", alpha=0.3)
+        ax.plot(times, small_tanoak, 'x', color=colours[0], label="Small tanoak")
+        ax.plot(times, large_tanoak, 'x', color=colours[1], label="Large tanoak")
+        ax.plot(times, bay, 'x', color=colours[2], label="Bay")
+        ax.plot(times, redwood, 'x', color=colours[3], label="Redwood")
+        ax.legend()
         plt.show()
 
         arg_max = np.unravel_index(np.argmax(abs(approx_model_run - bocop_run)), bocop_run.shape)
@@ -80,41 +79,44 @@ class TestOptimiser(unittest.TestCase):
         """Test BOCOP optimisation with control."""
 
         self.approx_model.params['primary_inf'] = 0.0000
-        self.approx_model.params['control_rate'] = 0.5
+        self.approx_model.params['rogue_rate'] = 0.5
+        self.approx_model.params['thin_rate'] = 0.5
+        self.approx_model.params['protect_rate'] = 0.5
+        self.approx_model.params['rogue_cost'] = 20
+        self.approx_model.params['thin_cost'] = 20
+        self.approx_model.params['protect_cost'] = 1
 
-        bocop_state_t, bocop_control_t, exit_text = self.approx_model.optimise(
+        bocop_run, bocop_control_t, exit_text = self.approx_model.optimise(
             verbose=True)
+        bocop_run = bocop_run[0:15]
 
         self.assertTrue(exit_text == "Optimal Solution Found." or
                         exit_text == "Solved To Acceptable Level.")
 
-        bocop_run = np.array([bocop_state_t(t)[:-1] for t in self.approx_model.setup['times']]).T
-
-        approx_model_run, apprx_obj = self.approx_model.run_policy(
+        approx_model_run, *_ = self.approx_model.run_policy(
             bocop_control_t, n_fixed_steps=1000)
+        times = self.approx_model.setup['times']
+        approx_model_run = approx_model_run[0:15]
+
+        print(approx_model_run.shape, bocop_run.shape)
+
         fig = plt.figure()
         ax = fig.add_subplot(111)
-        self.approx_model.plot(ax=ax)
+        visualisation.plot_hosts(times, approx_model_run, ax=ax, proportions=False)
 
-        host_totals = np.sum(bocop_run, axis=0)
-        times = self.approx_model.setup['times']
+        small_tanoak = np.sum(bocop_run[0:6, :], axis=0)
+        large_tanoak = np.sum(bocop_run[6:12, :], axis=0)
+        bay = np.sum(bocop_run[12:14, :], axis=0)
+        redwood = bocop_run[14, :]
 
-        small_tanoak_sus = np.sum(bocop_run[[0, 3], :], axis=0) / host_totals
-        large_tanoak_sus = np.sum(bocop_run[[6, 9], :], axis=0) / host_totals
-        small_tanoak_inf = np.sum(bocop_run[[1, 4], :], axis=0) / host_totals
-        large_tanoak_inf = np.sum(bocop_run[[7, 10], :], axis=0) / host_totals
+        cmap = plt.get_cmap("tab20c")
+        colours = [cmap(2.5*0.05), cmap(0.5*0.05), cmap(8.5*0.05), cmap(4.5*0.05)]
 
-        bay_sus = bocop_run[12, :] / host_totals
-        bay_inf = bocop_run[13, :] / host_totals
-        redwood = bocop_run[14, :] / host_totals
-
-        ax.plot(times, small_tanoak_sus + small_tanoak_inf, 'kx', label="Small tanoak")
-        ax.plot(times, large_tanoak_sus + large_tanoak_inf, 'kx', label="Large tanoak")
-        ax.plot(times, bay_sus+bay_inf, 'bx', label="Bay")
-        ax.plot(times, bay_inf, 'bx', label="Bay I")
-        ax.plot(times, redwood, 'rx', label="Redwood")
-        ax.plot(times, small_tanoak_inf, 'rx', label="Small tanoak I", alpha=0.3)
-        ax.plot(times, large_tanoak_inf, 'rx', label="Large tanoak I", alpha=0.3)
+        ax.plot(times, small_tanoak, 'x', color=colours[0], label="Small tanoak")
+        ax.plot(times, large_tanoak, 'x', color=colours[1], label="Large tanoak")
+        ax.plot(times, bay, 'x', color=colours[2], label="Bay")
+        ax.plot(times, redwood, 'x', color=colours[3], label="Redwood")
+        ax.legend()
         plt.show()
 
         arg_max = np.unravel_index(np.argmax(abs(approx_model_run - bocop_run)), bocop_run.shape)

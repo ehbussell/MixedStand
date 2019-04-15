@@ -265,7 +265,11 @@ class MixedStandApprox:
             d_state[3*i] += self.params.get("vaccine_decay", 0.0) * state[3*i+2]
 
         if control_func is not None:
-            control = control_func(time) * self.params.get('control_rate', 0.0)
+            control = control_func(time)
+
+            control[0:3] *= self.params.get('rogue_rate', 0.0)
+            control[3:7] *= self.params.get('thin_rate', 0.0)
+            control[7:] *= self.params.get('protect_rate', 0.0)
 
             # Roguing
             d_state[1] -= control[0] * state[1]
@@ -295,7 +299,7 @@ class MixedStandApprox:
             control = np.zeros(9)
 
         # Objective function
-        d_state[-1] = utils.objective_integrand(time, state, control, self.params)
+        d_state[-1] = utils.objective_integrand(time, state[:15], control, self.params)
 
         return d_state
 
@@ -430,8 +434,8 @@ class MixedStandApprox:
                 self.setup['state_init'][i]) + " equal\n"
 
         # When no integrated term in objective, set bounds on integrand to zero to aid convergence
-        if (self.params.get('div_cost', 0.0) == 0.0 and
-                self.params.get('cull_cost', 0.0) == 0.0 and
+        if (self.params.get('div_cost', 0.0) ==
+                self.params.get('cull_cost', 0.0) ==
                 self.params.get('protect_cost', 0.0) == 0.0):
             all_lines[42] = "0.0 0.0 both\n"
         else:
@@ -445,7 +449,7 @@ class MixedStandApprox:
 
             del all_lines[56:]
             all_lines.append("\n# Bounds for the path constraints :\n")
-            all_lines.append("-2e+020 1 upper\n")
+            all_lines.append("-2e+020 {} upper\n".format(self.params['max_budget']))
         else:
             n_optim_vars = n_stages * 9
             all_lines[6] = "16 16 9 0 " + str(n_optim_vars) + " 10\n"
@@ -455,7 +459,7 @@ class MixedStandApprox:
                 all_lines.append("0 1 both\n")
 
             all_lines.append("\n# Bounds for the path constraints :\n")
-            all_lines.append("-2e+020 1 upper\n")
+            all_lines.append("-2e+020 {} upper\n".format(self.params['max_budget']))
             for i in range(9):
                 all_lines.append("0 0 equal\n")
 
@@ -497,20 +501,23 @@ class MixedStandApprox:
         all_lines[38] = str(self.params['recov_tanoak']) + "\n"
         all_lines[39] = str(self.params['recov_bay']) + "\n"
         all_lines[40] = str(self.params.get('primary_inf', 0.0)) + "\n"
-        all_lines[41] = str(self.params.get('control_rate', 0.0)) + "\n"
-        all_lines[42] = str(self.params.get('treat_eff', 0.0)) + "\n"
-        all_lines[43] = str(self.params.get('div_cost', 0.0)) + "\n"
-        all_lines[44] = str(self.params.get('cull_cost', 0.0)) + "\n"
-        all_lines[45] = str(self.params.get('protect_cost', 0.0)) + "\n"
-        all_lines[46] = str(self.params.get('discount_rate', 0.0)) + "\n"
-        all_lines[47] = str(self.params.get('payoff_factor', 0.0)) + "\n"
+        all_lines[41] = str(self.params.get('rogue_rate', 0.0)) + "\n"
+        all_lines[42] = str(self.params.get('thin_rate', 0.0)) + "\n"
+        all_lines[43] = str(self.params.get('protect_rate', 0.0)) + "\n"
+        all_lines[44] = str(self.params.get('treat_eff', 0.0)) + "\n"
+        all_lines[45] = str(self.params.get('div_cost', 0.0)) + "\n"
+        all_lines[46] = str(self.params.get('rogue_cost', 0.0)) + "\n"
+        all_lines[47] = str(self.params.get('thin_cost', 0.0)) + "\n"
+        all_lines[48] = str(self.params.get('protect_cost', 0.0)) + "\n"
+        all_lines[49] = str(self.params.get('discount_rate', 0.0)) + "\n"
+        all_lines[50] = str(self.params.get('payoff_factor', 0.0)) + "\n"
 
         if n_stages is None:
-            all_lines[48] = "0\n"
+            all_lines[51] = "0\n"
         else:
-            all_lines[48] = str(n_stages) + "\n"
+            all_lines[51] = str(n_stages) + "\n"
 
-        all_lines[49] = str(self.params.get('vaccine_decay', 0.0)) + "\n"
+        all_lines[52] = str(self.params.get('vaccine_decay', 0.0)) + "\n"
 
         with _try_file_open(os.path.join(folder, "problem.constants")) as outfile:
             outfile.writelines(all_lines)

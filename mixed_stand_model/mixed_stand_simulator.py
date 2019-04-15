@@ -416,7 +416,11 @@ class MixedStandSimulator:
             self.params.get("vaccine_decay", 0.0) * state[self._indices['tan_s_idx'] + 2])
 
         if control_func is not None:
-            control = control_func(time) * self.params.get('control_rate', 0.0)
+            control = control_func(time)
+
+            control[0:3] *= self.params.get('rogue_rate', 0.0)
+            control[3:7] *= self.params.get('thin_rate', 0.0)
+            control[7:] *= self.params.get('protect_rate', 0.0)
 
             roguing = np.tile(
                 np.array([control[0], control[0], control[1], control[1], control[2]]), self.ncells)

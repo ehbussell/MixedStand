@@ -30,45 +30,56 @@
 #include "header_pathcond"
 
 {
-	// Total control proportion <= 1
-	path_constraints[0] = control[0] + control[1] + control[2] + control[3] + control[4] +
-						  control[5] + control[6] + control[7] + control[8];
+	double rogue_rate = constants[36];
+	double thin_rate = constants[37];
+	double protect_rate = constants[38];
+
+	double rogue_cost = constants[41];
+	double thin_cost = constants[42];
+	double protect_cost = constants[43];
+
+	int n_stages = constants[46];
+
+	// Total control expenditure <= budget
+	path_constraints[0] = (control[0] + control[1] + control[2]) * rogue_rate * rogue_cost +
+		(control[3] + control[4] + control[5] + control[6]) * thin_rate * thin_cost +
+		(control[7] + control[8]) * protect_rate * protect_cost;
 
 	if (dim_path_constraints > 1){
 		path_constraints[1] = control[0] - parametrizedcontrol(
-			1, constants[43], 0, &optimvars[0*(int)constants[43]], normalized_time,
+			1, n_stages, 0, &optimvars[0*n_stages], normalized_time,
 			fixed_initial_time, fixed_final_time);
 
 		path_constraints[2] = control[1] - parametrizedcontrol(
-			1, constants[43], 0, &optimvars[1*(int)constants[43]], normalized_time,
+			1, n_stages, 0, &optimvars[1*n_stages], normalized_time,
 			fixed_initial_time, fixed_final_time);
 
 		path_constraints[3] = control[2] - parametrizedcontrol(
-			1, constants[43], 0, &optimvars[2*(int)constants[43]], normalized_time,
+			1, n_stages, 0, &optimvars[2*n_stages], normalized_time,
 			fixed_initial_time, fixed_final_time);
 
 		path_constraints[4] = control[3] - parametrizedcontrol(
-			1, constants[43], 0, &optimvars[3*(int)constants[43]], normalized_time,
+			1, n_stages, 0, &optimvars[3*n_stages], normalized_time,
 			fixed_initial_time, fixed_final_time);
 
 		path_constraints[5] = control[4] - parametrizedcontrol(
-			1, constants[43], 0, &optimvars[4*(int)constants[43]], normalized_time,
+			1, n_stages, 0, &optimvars[4*n_stages], normalized_time,
 			fixed_initial_time, fixed_final_time);
 
 		path_constraints[6] = control[5] - parametrizedcontrol(
-			1, constants[43], 0, &optimvars[5*(int)constants[43]], normalized_time,
+			1, n_stages, 0, &optimvars[5*n_stages], normalized_time,
 			fixed_initial_time, fixed_final_time);
 
 		path_constraints[7] = control[6] - parametrizedcontrol(
-			1, constants[43], 0, &optimvars[6*(int)constants[43]], normalized_time,
+			1, n_stages, 0, &optimvars[6*n_stages], normalized_time,
 			fixed_initial_time, fixed_final_time);
 
 		path_constraints[8] = control[7] - parametrizedcontrol(
-			1, constants[43], 0, &optimvars[7*(int)constants[43]], normalized_time,
+			1, n_stages, 0, &optimvars[7*n_stages], normalized_time,
 			fixed_initial_time, fixed_final_time);
 
 		path_constraints[9] = control[8] - parametrizedcontrol(
-			1, constants[43], 0, &optimvars[8*(int)constants[43]], normalized_time,
+			1, n_stages, 0, &optimvars[8*n_stages], normalized_time,
 			fixed_initial_time, fixed_final_time);
 
 	}

@@ -4,19 +4,19 @@
 # Initial and final time :
 time.free string none
 time.initial double 0.0
-time.final double 100.0
+time.final double 50.0
 
 # Dimensions :
 state.dimension integer 16
 control.dimension integer 9
 algebraic.dimension integer 0
-parameter.dimension integer 180
-constant.dimension integer 45
+parameter.dimension integer 0
+constant.dimension integer 48
 boundarycond.dimension integer 16
-constraint.dimension integer 10
+constraint.dimension integer 1
 
 # Discretization :
-discretization.steps integer 200
+discretization.steps integer 100
 discretization.method string gauss
 
 # Optimization :
@@ -119,15 +119,18 @@ constant.32 string age_trans_3
 constant.33 string recov_tan
 constant.34 string recov_bay
 constant.35 string primary_inf
-constant.36 string max_control_rate
-constant.37 string treat_eff
-constant.38 string div_cost
-constant.39 string cull_cost
-constant.40 string protect_cost
-constant.41 string discount_rate
-constant.42 string payoff_factor
-constant.43 string n_stages
-constant.44 string vaccine_decay
+constant.36 string rogue_rate
+constant.37 string thin_rate
+constant.38 string protect_rate
+constant.39 string treat_eff
+constant.40 string div_cost
+constant.41 string rogue_cost
+constant.42 string thin_cost
+constant.43 string protect_cost
+constant.44 string discount_rate
+constant.45 string payoff_factor
+constant.46 string n_stages
+constant.47 string vaccine_decay
 
 # Solution file :
 solution.file string problem.sol
