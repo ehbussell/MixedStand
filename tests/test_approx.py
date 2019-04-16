@@ -338,3 +338,102 @@ class TestNonSpatialRates(unittest.TestCase):
         deriv = self.model.state_deriv(0.0, state)[0:-1]
         print("Infection rates:", deriv, expected_deriv)
         self.assertTrue(np.allclose(deriv, expected_deriv))
+
+class TestControlRates(unittest.TestCase):
+    """Test calculations of state derivatives when system is under control."""
+
+    def setUp(self):
+        S11, S12, S13, S14, S2, S3 = parameters.COBB_INIT_FIG4A
+        state_init = np.tile([
+            S11, 0.0, 0.0, S12, 0.0, 0.0, S13, 0.0, 0.0, S14, 0.0, 0.0, S2, 0.0, S3], 1)
+
+        setup = {
+            'state_init': state_init,
+            'times': np.linspace(0, 100, 101)
+        }
+
+        self.model = ms_approx.MixedStandApprox(setup, ZERO_PARAMS, np.zeros(7))
+
+    def test_rogue(self):
+        """Test roguing rates are correct."""
+
+        params = copy.deepcopy(ZERO_PARAMS)
+        params['rogue_rate'] = np.random.rand()
+
+        self.model.params = params
+
+        state = np.random.rand(15)
+
+        control = np.zeros(9)
+        control[:3] = np.random.rand(3)
+
+        def control_func(time):
+            return control
+
+        expected_deriv = np.zeros_like(state)
+        expected_deriv[1] = - control[0] * state[1] * params['rogue_rate']
+        expected_deriv[4] = - control[0] * state[4] * params['rogue_rate']
+        expected_deriv[7] = - control[1] * state[7] * params['rogue_rate']
+        expected_deriv[10] = - control[1] * state[10] * params['rogue_rate']
+        expected_deriv[13] = - control[2] * state[13] * params['rogue_rate']
+
+        deriv = self.model.state_deriv(0.0, state, control_func=control_func)[:-1]
+        print("Rogue rates:", deriv, expected_deriv)
+        self.assertTrue(np.allclose(deriv, expected_deriv))
+
+    def test_thin(self):
+        """Test thinning rates are correct."""
+
+        params = copy.deepcopy(ZERO_PARAMS)
+        params['thin_rate'] = np.random.rand()
+
+        self.model.params = params
+
+        state = np.random.rand(15)
+
+        control = np.zeros(9)
+        control[3:7] = np.random.rand(4)
+
+        def control_func(time):
+            return control
+
+        expected_deriv = np.zeros_like(state)
+        for j in range(6):
+            expected_deriv[j] = - control[3] * state[j] * params['thin_rate']
+        for j in range(6):
+            expected_deriv[j+6] = - control[4] * state[j+6] * params['thin_rate']
+        for j in range(2):
+            expected_deriv[j+12] = - control[5] * state[j+12] * params['thin_rate']
+        expected_deriv[14] = - control[6] * state[14] * params['thin_rate']
+
+        deriv = self.model.state_deriv(0.0, state, control_func=control_func)[:-1]
+        print("Thinning rates:", deriv, expected_deriv)
+        self.assertTrue(np.allclose(deriv, expected_deriv))
+
+    def test_protect(self):
+        """Test protection rates are correct."""
+
+        params = copy.deepcopy(ZERO_PARAMS)
+        params['protect_rate'] = np.random.rand()
+
+        self.model.params = params
+
+        state = np.random.rand(15)
+
+        control = np.zeros(9)
+        control[7:] = np.random.rand(2)
+
+        def control_func(time):
+            return control
+
+        expected_deriv = np.zeros_like(state)
+        for j in range(2):
+            expected_deriv[3*j] = - control[7] * state[3*j] * params['protect_rate']
+            expected_deriv[3*j+2] = control[7] * state[3*j] * params['protect_rate']
+        for j in range(2):
+            expected_deriv[3*j+6] = - control[8] * state[3*j+6] * params['protect_rate']
+            expected_deriv[3*j+6+2] = control[8] * state[3*j+6] * params['protect_rate']
+
+        deriv = self.model.state_deriv(0.0, state, control_func=control_func)[:-1]
+        print("Thinning rates:", deriv, expected_deriv)
+        self.assertTrue(np.allclose(deriv, expected_deriv))

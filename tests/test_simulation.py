@@ -2,15 +2,13 @@
 
 import unittest
 import copy
-import logging
 import numpy as np
 from mixed_stand_model import mixed_stand_simulator as ms_sim
 from mixed_stand_model import parameters
 from tests.utils import get_sis_params, sis_analytic, ZERO_PARAMS
 
-# TODO add tests of objective calculation
 # TODO add tests for vaccine decay
-
+# TODO add tests for control
 
 class TestNonSpatialDynamics(unittest.TestCase):
     """Test accuracy of simulator in non-spatial conditions."""
@@ -340,6 +338,113 @@ class TestNonSpatialRates(unittest.TestCase):
 
         deriv = self.model.state_deriv(0.0, np.append(state, 0))[:-1]
         print("Infection rates:", deriv, expected_deriv)
+        self.assertTrue(np.allclose(deriv, expected_deriv))
+
+class TestControlRates(unittest.TestCase):
+    """Test calculations of state derivatives when system is under control."""
+
+    def setUp(self):
+        S11, S12, S13, S14, S2, S3 = parameters.COBB_INIT_FIG4A
+        state_init = np.tile([
+            S11, 0.0, 0.0, S12, 0.0, 0.0, S13, 0.0, 0.0, S14, 0.0, 0.0, S2, 0.0, S3], 25)
+
+        setup = {
+            'state_init': state_init,
+            'landscape_dims': (5, 5),
+            'times': np.linspace(0, 100, 101)
+        }
+
+        self.model = ms_sim.MixedStandSimulator(setup, ZERO_PARAMS)
+        self.ncells = 25
+
+    def test_rogue(self):
+        """Test roguing rates are correct."""
+
+        params = copy.deepcopy(ZERO_PARAMS)
+        params['rogue_rate'] = np.random.rand()
+
+        self.model.params = params
+        self.model._initialise()
+
+        state = np.random.rand(15 * self.ncells)
+
+        control = np.zeros(9)
+        control[:3] = np.random.rand(3)
+
+        def control_func(time):
+            return control
+
+        expected_deriv = np.zeros_like(state)
+        for i in range(self.ncells):
+            expected_deriv[15*i+1] = - control[0] * state[15*i+1] * params['rogue_rate']
+            expected_deriv[15*i+4] = - control[0] * state[15*i+4] * params['rogue_rate']
+            expected_deriv[15*i+7] = - control[1] * state[15*i+7] * params['rogue_rate']
+            expected_deriv[15*i+10] = - control[1] * state[15*i+10] * params['rogue_rate']
+            expected_deriv[15*i+13] = - control[2] * state[15*i+13] * params['rogue_rate']
+
+        deriv = self.model.state_deriv(0.0, np.append(state, 0), control_func=control_func)[:-1]
+        print("Rogue rates:", deriv, expected_deriv)
+        self.assertTrue(np.allclose(deriv, expected_deriv))
+
+    def test_thin(self):
+        """Test thinning rates are correct."""
+
+        params = copy.deepcopy(ZERO_PARAMS)
+        params['thin_rate'] = np.random.rand()
+
+        self.model.params = params
+        self.model._initialise()
+
+        state = np.random.rand(15 * self.ncells)
+
+        control = np.zeros(9)
+        control[3:7] = np.random.rand(4)
+
+        def control_func(time):
+            return control
+
+        expected_deriv = np.zeros_like(state)
+        for i in range(self.ncells):
+            for j in range(6):
+                expected_deriv[15*i+j] = - control[3] * state[15*i+j] * params['thin_rate']
+            for j in range(6):
+                expected_deriv[15*i+j+6] = - control[4] * state[15*i+j+6] * params['thin_rate']
+            for j in range(2):
+                expected_deriv[15*i+j+12] = - control[5] * state[15*i+j+12] * params['thin_rate']
+            expected_deriv[15*i+14] = - control[6] * state[15*i+14] * params['thin_rate']
+
+        deriv = self.model.state_deriv(0.0, np.append(state, 0), control_func=control_func)[:-1]
+        print("Thinning rates:", deriv, expected_deriv)
+        self.assertTrue(np.allclose(deriv, expected_deriv))
+
+    def test_protect(self):
+        """Test protection rates are correct."""
+
+        params = copy.deepcopy(ZERO_PARAMS)
+        params['protect_rate'] = np.random.rand()
+
+        self.model.params = params
+        self.model._initialise()
+
+        state = np.random.rand(15 * self.ncells)
+
+        control = np.zeros(9)
+        control[7:] = np.random.rand(2)
+
+        def control_func(time):
+            return control
+
+        expected_deriv = np.zeros_like(state)
+        for i in range(self.ncells):
+            for j in range(2):
+                expected_deriv[15*i+3*j] = - control[7] * state[15*i+3*j] * params['protect_rate']
+                expected_deriv[15*i+3*j+2] = control[7] * state[15*i+3*j] * params['protect_rate']
+            for j in range(2):
+                expected_deriv[15*i+3*j+6] = - control[8] * state[15*i+3*j+6] * params['protect_rate']
+                expected_deriv[15*i+3*j+6+2] = control[8] * state[15*i+3*j+6] * params['protect_rate']
+
+        deriv = self.model.state_deriv(0.0, np.append(state, 0), control_func=control_func)[:-1]
+        print("Thinning rates:", deriv, expected_deriv)
         self.assertTrue(np.allclose(deriv, expected_deriv))
 
 class TestSpatialInfection(unittest.TestCase):
