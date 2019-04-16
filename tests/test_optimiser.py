@@ -1,14 +1,15 @@
 """Test BOCOP optimisation implementation of mixed stand approximate model."""
 
 import unittest
-from nose.plugins.attrib import attr
 import numpy as np
 import matplotlib.pyplot as plt
+import pytest
 from mixed_stand_model import mixed_stand_approx as ms_approx
 from mixed_stand_model import parameters
 from mixed_stand_model import visualisation
+from mixed_stand_model import utils
 
-@attr('slow')
+@pytest.mark.slow
 class TestOptimiser(unittest.TestCase):
     """Test accuracy of optimisation solutions."""
 
@@ -19,6 +20,9 @@ class TestOptimiser(unittest.TestCase):
         S11, S12, S13, S14, S2, S3 = parameters.COBB_INIT_FIG4A
         state_init = np.array([399*S11/400, S11/400, 0.0, S12, 0.0, 0.0, S13, 0.0, 0.0,
                                S14, 0.0, 0.0, 399*S2/400, S2/400, S3])
+
+        # Now initialise space weights and recruitment rates
+        self.params, state_init = utils.initialise_params(self.params, init_state=state_init)
 
         setup = {
             'state_init': state_init,
