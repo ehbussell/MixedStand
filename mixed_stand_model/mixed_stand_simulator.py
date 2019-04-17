@@ -210,7 +210,7 @@ class MixedStandSimulator:
 
         self._linear_matrix = A
 
-        logging.info("Completed linear matrix intialisation")
+        logging.debug("Completed linear matrix intialisation")
 
         # Infection matrix B. This is multiplied by infectious hosts to get change in susceptible
         # hosts. i.e. dSus = B * Inf
@@ -304,7 +304,7 @@ class MixedStandSimulator:
 
         self._inf_matrix = B
 
-        logging.info("Completed infection matrix intialisation")
+        logging.debug("Completed infection matrix intialisation")
 
     def _get_recruit(self, state):
         """Return recruitment rates for given full state."""
@@ -442,7 +442,7 @@ class MixedStandSimulator:
             if n_fixed_steps is not None:
                 # Use fixed steps
                 t_old_int = ts[-1]
-                state_old_int = xs[-1]
+                state_old_int = np.append(xs[-1], obj[-1])
                 for t_int in np.linspace(ts[-1], time, n_fixed_steps+2)[1:]:
                     h = t_int - t_old_int
                     k1 = h * self.state_deriv(t_int, state_old_int, control_policy)
