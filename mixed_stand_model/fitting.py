@@ -11,6 +11,121 @@ from scipy.optimize import minimize
 
 from . import mixed_stand_simulator as ms_sim
 from .mixed_stand_approx import MixedStandApprox
+from . import parameters
+from . import utils
+
+
+def scale_sim_model(lower_bound=None, upper_bound=None, time_step=None):
+    """Scale infection rates in simulation to match time scales using incorrect Cobb 2012 model.
+
+    The time scale is measured by the time taken for the populations of small and large tanoaks
+    to be equal in size.
+    """
+
+    if lower_bound is None:
+        lower_bound = 0.0
+        logging.info("No lower bound set, using %f", lower_bound)
+
+    if upper_bound is None:
+        upper_bound = 10.0
+        logging.info("No upper bound set, using %f", upper_bound)
+
+    if time_step is None:
+        time_step = 0.01
+        logging.info("No time step set, using %f", time_step)
+
+    # First find crossover time using Cobb 2012 parameters
+    params = parameters.COBB_PARAMS
+    # Initialise using Cobb 2012 Fig 4a host proportions
+    host_props = parameters.COBB_PROP_FIG4A
+    params, state_init = utils.initialise_params(params, host_props=host_props)
+    state_init = np.tile(state_init, 400)
+
+    # Set initial infection level
+    init_inf_cells = [189]
+    init_inf_factor = 0.5
+    for cell_pos in init_inf_cells:
+        for i in [0, 4]:
+            state_init[cell_pos*15+3*i+1] = init_inf_factor * state_init[cell_pos*15+3*i]
+            state_init[cell_pos*15+3*i] *= (1.0 - init_inf_factor)
+
+    setup = {
+        'state_init': state_init,
+        'landscape_dims': (20, 20),
+        'times': np.arange(0, 50, step=time_step)
+    }
+
+    logging.info("Using landscape dimensions (%d, %d)", *setup['landscape_dims'])
+    logging.info("Using initial infection in cells %s", init_inf_cells)
+    logging.info("Using initial infection proportion %f", init_inf_factor)
+
+    base_model = ms_sim.MixedStandSimulator(setup, params)
+    base_sim_run, *_ = base_model.run_policy(control_policy=None)
+    base_cross_time = _get_crossover_time(base_sim_run, base_model.ncells, setup['times'])
+
+    logging.info("Cross over time in base simulation model: %f", base_cross_time)
+
+    if base_cross_time == np.inf:
+        logging.error("Found no cross over in this time domain!")
+
+    # Avoid runnning simulations for too long - round up to next multiple of 5 in time units
+    setup['times'] = np.arange(0, 5*np.ceil(base_cross_time/5), step=time_step)
+
+    # Now find factor to scale infection rates
+    tolerance = setup['times'][1] / 2
+    prev_upper = upper_bound
+    prev_lower = lower_bound
+    new_factor = (upper_bound + lower_bound) / 2
+
+    logging.debug("Bounds now (%f, %f), now trying new factor: %f",
+                  prev_lower, prev_upper, new_factor)
+
+    # Run simulation with new factor to test
+    params = copy.deepcopy(parameters.CORRECTED_PARAMS)
+    params, _ = utils.initialise_params(params, host_props=host_props)
+    params['inf_tanoak_tanoak'] *= new_factor
+    params['inf_bay_to_bay'] *= new_factor
+    params['inf_bay_to_tanoak'] *= new_factor
+    model = ms_sim.MixedStandSimulator(setup, params)
+    sim_run, *_ = model.run_policy(control_policy=None)
+
+    new_cross_over_time = _get_crossover_time(sim_run, model.ncells, setup['times'])
+    diff = base_cross_time - new_cross_over_time
+    logging.info("Using factor %f, new cross over time: %f", new_factor, new_cross_over_time)
+    logging.debug("Using factor %f, error in cross over time: %f", new_factor, diff)
+
+    while abs(diff) > tolerance:
+        if diff > 0:
+            if new_factor == prev_lower:
+                prev_upper, new_factor, prev_lower = new_factor, 0.5*new_factor, 0.5*new_factor
+            else:
+                prev_upper, new_factor = new_factor, np.mean([prev_lower, new_factor])
+        else:
+            if new_factor == prev_upper:
+                prev_lower, new_factor, prev_upper = new_factor, 2*new_factor, 2*new_factor
+            else:
+                prev_lower, new_factor = new_factor, np.mean([prev_upper, new_factor])
+
+        logging.info("Bounds now (%f, %f), now trying new factor: %f",
+                     prev_lower, prev_upper, new_factor)
+
+        params = copy.deepcopy(parameters.CORRECTED_PARAMS)
+        params, _ = utils.initialise_params(params, host_props=host_props)
+        params['inf_tanoak_tanoak'] *= new_factor
+        params['inf_bay_to_bay'] *= new_factor
+        params['inf_bay_to_tanoak'] *= new_factor
+
+        model = ms_sim.MixedStandSimulator(setup, params)
+        sim_run, *_ = model.run_policy(control_policy=None)
+        new_cross_over_time = _get_crossover_time(sim_run, model.ncells, setup['times'])
+        diff = base_cross_time - new_cross_over_time
+        logging.info("Using factor %f, new cross over time: %f", new_factor, new_cross_over_time)
+
+
+    logging.info("Difference %f less than tolerance %f, using factor %f", diff, tolerance,
+                 new_factor)
+
+    return new_factor
 
 class MixedStandFitter:
     """Fitting of MixedStandApprox model to simulation data."""
@@ -31,57 +146,70 @@ class MixedStandFitter:
                 logging.info("Unused setup parameter: %s", key)
 
         self.params = copy.deepcopy(params)
+        self.tanoak_factors = None
         self.beta = None
 
-    def fit(self, start, bounds, dataset=None, show_plot=False, scale=True, averaged=False):
+    def fit(self, start, bounds, dataset=None, show_plot=False, scale=True, tanoak_factors=None):
         """Fit infection rate parameters, minimising sum of squared errors from simulation DPCs.
 
-        start:      Initial values of beta parameters for optimisation (length 7 array).
-        bounds:     Bounds for beta parameters (array of 7 (lower, upper) tuples).
-        dataset:    If present use this dataset of simulation runs to fit approximate model. If 2d
-                    array then corresponds to single simulation run output. If 3d, first dimension
-                    specifies each run in the ensemble. Can be averaged across cells.
-        show_plot:  Whether to show interactive plot of fit.
-        scale:      Whether to use scaling when fitting to weight smaller numbers more.
-        averaged:   Whether dataset has been averaged across cells.
+        start:          Initial values of beta parameters for optimisation (length 7 array).
+                            beta_1,1
+                            beta_1,2
+                            beta_1,3
+                            beta_1,4
+                            beta_12
+                            beta_21
+                            beta_2
+        bounds:         Bounds for beta parameters (array of 7 (lower, upper) tuples).
+        dataset:        If present use this dataset of simulation runs to fit approximate model.
+                        Must be 3d array with shape (nruns, 15, ntimes). First dimension specifies
+                        each run in the ensemble. Results from spatial simulations should be
+                        averaged across cells.
+        show_plot:      Whether to show interactive plot of fit.
+        scale:          Whether to use scaling when fitting to weight smaller numbers more.
+        tanoak_factors: Relative infection rate in tanoak age classes 2,3 and 4 compared to tanoak
+                        age class 1. If specified this will constrain fitting
+
+        Returns: fitted approximate model and beta array.
         """
 
         # Get simulator data if not provided
         ncells = np.prod(self.setup['landscape_dims'])
-        inf_idx = np.array([15*loc+np.arange(1, 14, 3) for loc in range(ncells)]).flatten()
 
         if dataset is None:
+            logging.info("No dataset provided; running single simulation.")
             simulator = ms_sim.MixedStandSimulator(self.setup, self.params)
             sim_run, *_ = simulator.run_policy(None)
-            inf_data = np.sum(sim_run[inf_idx, :].reshape((ncells, 5, -1)), axis=0) / ncells
-
-        elif len(dataset.shape) == 2:
-            if averaged:
-                inf_data = dataset[np.arange(1, 14, 3), :]
-            else:
-                inf_data = np.sum(dataset[inf_idx, :].reshape((ncells, 5, -1)), axis=0) / ncells
+            inf_idx = np.array([15*loc+np.arange(1, 14, 3) for loc in range(ncells)]).flatten()
+            inf_data = np.expand_dims(
+                np.sum(sim_run[inf_idx, :].reshape((ncells, 5, -1)), axis=0) / ncells, axis=0)
 
         else:
-            if averaged:
-                inf_data = dataset[:, np.arange(1, 14, 3), :]
-            else:
-                inf_data = np.sum(dataset[:, inf_idx, :].reshape((dataset.shape[0], ncells, 5, -1)),
-                                  axis=1) / ncells
+            inf_data = dataset[:, np.arange(1, 14, 3), :]
+
+        if tanoak_factors is not None:
+            # Constrain bounds on age classes 2+ and set these values based on age class 1 when
+            # optimising
+            for i in range(3):
+                bounds[i+1] = (-1, -1)
+                start[i+1] = -1
+            self.tanoak_factors = tanoak_factors
 
         # TODO check scaling sensible
         if scale:
             scales = np.amax(inf_data, axis=-1)
-            if len(scales.shape) > 1:
-                scales = np.mean(scales, axis=0)
+            scales = np.mean(scales, axis=0)
             scaling_matrix = np.tile(
                 np.divide(1, scales, out=np.zeros_like(scales), where=(scales > 0)),
                 inf_data.shape[-1]).reshape((5, -1), order="F")
         else:
             scaling_matrix = np.ones(inf_data.shape[-2:])
 
-        start_transformed = logit_transform(start, bounds)
+        start_transformed = _logit_transform(start, bounds)
 
         approx_model = MixedStandApprox(self.setup, self.params, start)
+
+        logging.info("Starting fit minimisation")
 
         # Minimise SSE
         param_fit_transformed = minimize(
@@ -89,11 +217,12 @@ class MixedStandFitter:
             options={'ftol': 1e-6, 'disp': True},
             args=(inf_data, approx_model, bounds, scaling_matrix))
 
-        param_fit = reverse_logit_transform(param_fit_transformed.x, bounds)
+        param_fit = _reverse_logit_transform(param_fit_transformed.x, bounds)
+        if self.tanoak_factors is not None:
+            for i in range(3):
+                param_fit[i+1] = param_fit[0] * self.tanoak_factors[i]
 
         approx_model.beta = param_fit
-        for i in range(3):
-            approx_model.beta[i+1] *= approx_model.beta[0]
 
         if show_plot:
             model_run, *_ = approx_model.run_policy(None)
@@ -102,13 +231,9 @@ class MixedStandFitter:
             ax = fig.add_subplot(111)
             names = ["Tan 1", "Tan 2", "Tan 3", "Tan 4", "Bay"]
             for i, name in enumerate(names):
-                if len(inf_data.shape) > 2:
-                    ax.plot([], color="C{}".format(i), label=name)
-                    ax.plot(self.setup['times'], inf_data[:, i, :].T, color="C{}".format(i),
-                            alpha=0.2)
-                else:
-                    ax.plot(self.setup['times'], inf_data[i, :], color="C{}".format(i), alpha=0.5,
-                            label=name)
+                ax.plot([], color="C{}".format(i), label=name)
+                ax.plot(self.setup['times'], inf_data[:, i, :].T, color="C{}".format(i),
+                        alpha=0.2)
                 ax.plot(self.setup['times'], model_inf[i, :], color="C{}".format(i))
             ax.legend()
             fig.tight_layout()
@@ -204,15 +329,17 @@ class MixedStandFitter:
         fig.savefig(os.path.join("..", "Figures", "SSESurface_Fig4b.pdf"), dpi=600)
 
     def _sse(self, params, sim_inf, approx_model, bounds, scales):
-        params = reverse_logit_transform(params, bounds)
-        beta = params[0:7]
-        # powers = params[7:]
+        params = _reverse_logit_transform(params, bounds)
+        beta = params
+
+        # If factors fixed for tanoak age classes then use those
+        if self.tanoak_factors is not None:
+            for i in range(3):
+                beta[i+1] = beta[0] * self.tanoak_factors[i]
 
         approx_model.beta = beta
-        for i in range(3):
-            approx_model.beta[i+1] *= approx_model.beta[0]
-        # approx_model.powers = powers
 
+        # Run approximate model
         model_run, *_ = approx_model.run_policy(None)
         model_inf = model_run[1:14:3, :]
 
@@ -222,7 +349,7 @@ class MixedStandFitter:
         sse = np.sum(np.square(scales * (sim_inf - model_inf)))
         return sse
 
-def logit_transform(params, bounds):
+def _logit_transform(params, bounds):
     """Logit transform parameters to remove bounds."""
     with np.errstate(divide="ignore", invalid="ignore"):
         ret_array = np.ma.array(
@@ -230,8 +357,21 @@ def logit_transform(params, bounds):
         ret_array.set_fill_value(0)
         return np.ma.filled(ret_array)
 
-def reverse_logit_transform(params, bounds):
+def _reverse_logit_transform(params, bounds):
     """Reverse logit transform parameters to return bounds."""
 
     return np.array(
         [a + ((b-a)*np.exp(x) / (1 + np.exp(x))) for x, (a, b) in zip(params, bounds)])
+
+def _get_crossover_time(sim_run, ncells, times):
+    """Calculate time when small and large tanoak populations cross over."""
+
+    small_idx = np.array([15*loc+np.arange(0, 6) for loc in range(ncells)]).flatten()
+    large_idx = np.array([15*loc+np.arange(6, 12) for loc in range(ncells)]).flatten()
+    small = np.sum(sim_run[small_idx, :], axis=0) / np.sum(sim_run, axis=0)
+    large = np.sum(sim_run[large_idx, :], axis=0) / np.sum(sim_run, axis=0)
+
+    crossed = np.nonzero(small >= large)[0]
+    if len(crossed) > 0:
+        return times[crossed[0]]
+    return np.inf

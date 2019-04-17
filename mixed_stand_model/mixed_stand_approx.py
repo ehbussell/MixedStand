@@ -32,7 +32,6 @@ class MixedStandApprox:
     A fit object is also required
     """
 
-    # TODO add initialisation function
 
     def __init__(self, setup, params, fit):
         required_keys = ['state_init', 'times']
@@ -276,7 +275,7 @@ class MixedStandApprox:
         ode.set_initial_value(np.append(self.setup['state_init'], [0.0]), self.setup['times'][0])
         ode.set_f_params(control_policy)
 
-        logging.info("Starting ODE run")
+        logging.debug("Starting ODE run")
 
         ts = [self.setup['times'][0]]
         xs = [self.setup['state_init']]
@@ -313,7 +312,7 @@ class MixedStandApprox:
                     logging.error("ODE solver error!")
                     raise RuntimeError("ODE solver error!")
 
-        logging.info("ODE run completed")
+        logging.debug("ODE run completed")
 
         state = np.vstack(xs).T
         self.run['state'] = state
