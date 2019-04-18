@@ -93,7 +93,7 @@ def plot_dpcs(times, model_run, ax=None, combine_ages=True, proportions=True, **
 
     return ax
 
-def plot_control(times, control_policy, ax=None, labels=None, colors=None, **kwargs):
+def plot_control(times, control_policy, params, ax=None, labels=None, colors=None, **kwargs):
     """Plot given control strategy."""
 
     if ax is None:
@@ -122,6 +122,10 @@ def plot_control(times, control_policy, ax=None, labels=None, colors=None, **kwa
                   [cmap(0.025 + x*0.05) for x in [4, 5, 6]] +
                   [cmap(0.025 + x*0.05) for x in [12, 14]])
     all_controls = np.array([control_policy(t)[order] for t in times]).T
+
+    all_controls[0:4] *= params['thin_rate'] * params['thin_cost']
+    all_controls[4:7] *= params['rogue_rate'] * params['rogue_cost']
+    all_controls[7:] *= params['protect_rate'] * params['protect_cost']
 
     ax.stackplot(times, *all_controls, labels=labels, colors=colors, **kwargs)
 

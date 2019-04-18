@@ -356,6 +356,11 @@ class MixedStandApprox:
         state_t, _, control_t, exit_text = bocop_utils.readSolFile(
             os.path.join(bocop_dir, "problem.sol"), ignore_fail=True)
 
+        if exit_text == "Optimal Solution Found." or exit_text == "Solved To Acceptable Level.":
+            logging.info("BOCOP optimisation completed with exit code: %s", exit_text)
+        else:
+            logging.error("BOCOP optimisation failed with exit code: %s", exit_text)
+
         actual_states = np.array([state_t(t) for t in self.setup['times']]).T
 
         if n_stages is not None:
@@ -389,9 +394,7 @@ class MixedStandApprox:
                 self.setup['state_init'][i]) + " equal\n"
 
         # When no integrated term in objective, set bounds on integrand to zero to aid convergence
-        if (self.params.get('div_cost', 0.0) ==
-                self.params.get('cull_cost', 0.0) ==
-                self.params.get('protect_cost', 0.0) == 0.0):
+        if self.params.get('div_cost', 0.0) == 0.0:
             all_lines[42] = "0.0 0.0 both\n"
         else:
             all_lines[42] = "-1e6 1e6 both\n"

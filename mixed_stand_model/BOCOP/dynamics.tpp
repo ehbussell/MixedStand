@@ -52,7 +52,7 @@
 	double thin_rate = constants[37];
 	double protect_rate = constants[38];
 	double treat_eff = constants[39];
-	// double div_cost = constants[41];
+	double div_cost = constants[40];
 	double discount_rate = constants[44];
 	double vaccine_decay = constants[47];
 
@@ -67,15 +67,15 @@
 	Tdouble bay = fabs(state[12] + state[13]);
 	Tdouble red = fabs(state[14]);
 
-	// // Find total number of hosts
-	// Tdouble nhosts = small + large + bay + red;
+	// Find total number of hosts
+	Tdouble nhosts = small + large + bay + red;
 
-	// Tdouble diversity_costs = log(
-	// 	pow(small / nhosts, small / nhosts) * pow(large / nhosts, large / nhosts) *
-	// 	pow(bay / nhosts, bay / nhosts) * pow(red / nhosts, red / nhosts));
+	Tdouble diversity_costs = log(
+		pow(small / nhosts, small / nhosts) * pow(large / nhosts, large / nhosts) *
+		pow(bay / nhosts, bay / nhosts) * pow(red / nhosts, red / nhosts));
 	
 	// Objective function
-	// state_dynamics[15] = exp(- discount_rate * time) * (
+	state_dynamics[15] = exp(- discount_rate * time) * (
 	// 	cull_cost * control_rate * (
 	// 		control[0] * (state[1] + state[4]) + control[1] * (state[7] + state[10]) +
 	// 		control[2] * state[13] + control[3] * small + control[4] * large +
@@ -83,8 +83,8 @@
 	// 		control[6] * state[14]) + 
 	// 	protect_cost * control_rate * (
 	// 		control[7] * (state[0] + state[3]) + control[8] * (state[6] + state[9]))
-	// 	// div_cost * diversity_costs
-	// );
+	div_cost * diversity_costs
+	);
 
 	// Dynamics
 	// Initialise to zero
