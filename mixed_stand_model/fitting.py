@@ -15,9 +15,10 @@ from . import parameters
 from . import utils
 
 
-def scale_sim_model(lower_bound=None, upper_bound=None, time_step=None):
+def scale_sim_model(setup, old_params, new_params, lower_bound=None, upper_bound=None, time_step=None):
     """Scale infection rates in simulation to match time scales using incorrect Cobb 2012 model.
 
+    Model using new_params is scaled to match time scale using old_params.
     The time scale is measured by the time taken for the populations of small and large tanoaks
     to be equal in size.
     """
@@ -33,35 +34,14 @@ def scale_sim_model(lower_bound=None, upper_bound=None, time_step=None):
     if time_step is None:
         time_step = 0.01
         logging.info("No time step set, using %f", time_step)
+    
+    model_setup = copy.deepcopy(setup)
+    model_setup['times'] = np.arange(0, 50, step=time_step)
 
-    # First find crossover time using Cobb 2012 parameters
-    params = parameters.COBB_PARAMS
-    # Initialise using Cobb 2012 Fig 4a host proportions
-    host_props = parameters.COBB_PROP_FIG4A
-    params, state_init = utils.initialise_params(params, host_props=host_props)
-    state_init = np.tile(state_init, 400)
-
-    # Set initial infection level
-    init_inf_cells = [189]
-    init_inf_factor = 0.5
-    for cell_pos in init_inf_cells:
-        for i in [0, 4]:
-            state_init[cell_pos*15+3*i+1] = init_inf_factor * state_init[cell_pos*15+3*i]
-            state_init[cell_pos*15+3*i] *= (1.0 - init_inf_factor)
-
-    setup = {
-        'state_init': state_init,
-        'landscape_dims': (20, 20),
-        'times': np.arange(0, 50, step=time_step)
-    }
-
-    logging.info("Using landscape dimensions (%d, %d)", *setup['landscape_dims'])
-    logging.info("Using initial infection in cells %s", init_inf_cells)
-    logging.info("Using initial infection proportion %f", init_inf_factor)
-
-    base_model = ms_sim.MixedStandSimulator(setup, params)
+    # First find crossover time using old parameters
+    base_model = ms_sim.MixedStandSimulator(model_setup, old_params)
     base_sim_run, *_ = base_model.run_policy(control_policy=None)
-    base_cross_time = _get_crossover_time(base_sim_run, base_model.ncells, setup['times'])
+    base_cross_time = _get_crossover_time(base_sim_run, base_model.ncells, model_setup['times'])
 
     logging.info("Cross over time in base simulation model: %f", base_cross_time)
 
@@ -69,10 +49,10 @@ def scale_sim_model(lower_bound=None, upper_bound=None, time_step=None):
         logging.error("Found no cross over in this time domain!")
 
     # Avoid runnning simulations for too long - round up to next multiple of 5 in time units
-    setup['times'] = np.arange(0, 5*np.ceil(base_cross_time/5), step=time_step)
+    model_setup['times'] = np.arange(0, 5*np.ceil(base_cross_time/5), step=time_step)
 
     # Now find factor to scale infection rates
-    tolerance = setup['times'][1] / 2
+    tolerance = model_setup['times'][1] / 2
     prev_upper = upper_bound
     prev_lower = lower_bound
     new_factor = (upper_bound + lower_bound) / 2
@@ -81,15 +61,14 @@ def scale_sim_model(lower_bound=None, upper_bound=None, time_step=None):
                   prev_lower, prev_upper, new_factor)
 
     # Run simulation with new factor to test
-    params = copy.deepcopy(parameters.CORRECTED_PARAMS)
-    params, _ = utils.initialise_params(params, host_props=host_props)
+    params = copy.deepcopy(new_params)
     params['inf_tanoak_tanoak'] *= new_factor
     params['inf_bay_to_bay'] *= new_factor
     params['inf_bay_to_tanoak'] *= new_factor
-    model = ms_sim.MixedStandSimulator(setup, params)
+    model = ms_sim.MixedStandSimulator(model_setup, params)
     sim_run, *_ = model.run_policy(control_policy=None)
 
-    new_cross_over_time = _get_crossover_time(sim_run, model.ncells, setup['times'])
+    new_cross_over_time = _get_crossover_time(sim_run, model.ncells, model_setup['times'])
     diff = base_cross_time - new_cross_over_time
     logging.info("Using factor %f, new cross over time: %f", new_factor, new_cross_over_time)
     logging.debug("Using factor %f, error in cross over time: %f", new_factor, diff)
@@ -109,18 +88,16 @@ def scale_sim_model(lower_bound=None, upper_bound=None, time_step=None):
         logging.info("Bounds now (%f, %f), now trying new factor: %f",
                      prev_lower, prev_upper, new_factor)
 
-        params = copy.deepcopy(parameters.CORRECTED_PARAMS)
-        params, _ = utils.initialise_params(params, host_props=host_props)
+        params = copy.deepcopy(new_params)
         params['inf_tanoak_tanoak'] *= new_factor
         params['inf_bay_to_bay'] *= new_factor
         params['inf_bay_to_tanoak'] *= new_factor
 
-        model = ms_sim.MixedStandSimulator(setup, params)
+        model = ms_sim.MixedStandSimulator(model_setup, params)
         sim_run, *_ = model.run_policy(control_policy=None)
-        new_cross_over_time = _get_crossover_time(sim_run, model.ncells, setup['times'])
+        new_cross_over_time = _get_crossover_time(sim_run, model.ncells, model_setup['times'])
         diff = base_cross_time - new_cross_over_time
         logging.info("Using factor %f, new cross over time: %f", new_factor, new_cross_over_time)
-
 
     logging.info("Difference %f less than tolerance %f, using factor %f", diff, tolerance,
                  new_factor)

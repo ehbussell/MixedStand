@@ -11,37 +11,56 @@ from mixed_stand_model import fitting
 from mixed_stand_model import parameters
 from mixed_stand_model import utils
 
-def main(filename):
-    """Run fitting process: scale simulations and fit approximate models."""
+def fit_beta(setup, params):
+    """Fit approx model beta values."""
 
-    # First find beta scaling that gives matching time scale using corrected model
-    scaling_factor = fitting.scale_sim_model(time_step=0.001)
-
-    logging.info("Simulation scaling factor found: %f", scaling_factor)
-
-    # Write scaling results to file
-    results = {'sim_scaling_factor': scaling_factor}
-    with open(filename+'.json', "w") as outfile:
-        json.dump(results, outfile, indent=4)
-
-    # Now fit approximate model with Bay epidemiologically inactive
+    # First fit approximate model with Bay epidemiologically inactive
     # This ensures the within tanoak infection rates are identifiable, and we fix the relative rates
     # for the full fit.
 
     # First get parameters and setup
+    model_setup = copy.deepcopy(setup)
+    model_params = copy.deepcopy(params)
+
+    # Now set Bay to be epidemiologically inactive
+    model_params['inf_tanoak_to_bay'] = 0.0
+    model_params['inf_bay_to_tanoak'] = 0.0
+    model_params['inf_bay_to_bay'] = 0.0
+
+    fitter = fitting.MixedStandFitter(model_setup, model_params)
+
+    start = np.array([2.5, 0.4, 0.4, 0.4, 0.0, 0.0, 0.0])
+    bounds = [(1e-10, 20)] * 4 + [(0, 0)] *3
+    _, beta = fitter.fit(start, bounds, show_plot=False)
+
+    logging.info("Completed fit with Bay inactive")
+
+    tanoak_factors = beta[1:4] / beta[0]
+
+    logging.info("Tanoak relative infection rates: %s", tanoak_factors)
+
+    model_params = copy.deepcopy(params)
+    fitter = fitting.MixedStandFitter(model_setup, model_params)
+
+    start = np.array([2.5, 0.4, 0.4, 0.4, 3.5, 0.3, 4.6])
+    bounds = [(1e-10, 20)] * 7
+    _, beta = fitter.fit(start, bounds, show_plot=False, tanoak_factors=tanoak_factors)
+
+    logging.info("Approximate model beta values found")
+    logging.info("Beta: %s", beta)
+
+    return tanoak_factors, beta
+
+def main(filename):
+    """Run fitting process: scale simulations and fit approximate models."""
+
+    # Set parameters and initial conditions
     params = copy.deepcopy(parameters.CORRECTED_PARAMS)
-    inf_keys = ['inf_tanoak_tanoak', 'inf_tanoak_to_bay', 'inf_bay_to_bay', 'inf_bay_to_tanoak']
-    for key in inf_keys:
-        params[key] *= scaling_factor
+
     # Initialise using Cobb 2012 Fig 4a host proportions
     host_props = parameters.COBB_PROP_FIG4A
     params, state_init = utils.initialise_params(params, host_props=host_props)
     state_init = np.tile(state_init, 400)
-
-    # Now set Bay to be epidemiologically inactive
-    params['inf_tanoak_to_bay'] = 0.0
-    params['inf_bay_to_tanoak'] = 0.0
-    params['inf_bay_to_bay'] = 0.0
 
     # Set initial infection level
     init_inf_cells = [189]
@@ -61,43 +80,28 @@ def main(filename):
     logging.info("Using initial infection in cells %s", init_inf_cells)
     logging.info("Using initial infection proportion %f", init_inf_factor)
 
-    fitter = fitting.MixedStandFitter(setup, params)
+    # First find beta scaling that gives matching time scale using corrected model
+    scaling_factor = fitting.scale_sim_model(
+        setup, parameters.COBB_PARAMS, parameters.CORRECTED_PARAMS, time_step=0.001)
 
-    start = np.array([2.5, 0.4, 0.4, 0.4, 0.0, 0.0, 0.0])
-    bounds = [(1e-10, 20)] * 4 + [(0, 0)] *3
-    _, beta = fitter.fit(start, bounds, show_plot=False)
+    logging.info("Simulation scaling factor found: %f", scaling_factor)
 
-    logging.info("Completed fit with Bay inactive")
-
-    tanoak_factors = beta[1:4] / beta[0]
-
-    logging.info("Tanoak relative infection rates: %s", tanoak_factors)
-
-    results['tanoak_beta_factors'] = tanoak_factors.tolist()
+    # Write scaling results to file
+    results = {'sim_scaling_factor': scaling_factor}
     with open(filename+'.json', "w") as outfile:
         json.dump(results, outfile, indent=4)
-
-    params = copy.deepcopy(parameters.CORRECTED_PARAMS)
+    
     inf_keys = ['inf_tanoak_tanoak', 'inf_tanoak_to_bay', 'inf_bay_to_bay', 'inf_bay_to_tanoak']
     for key in inf_keys:
         params[key] *= scaling_factor
-    # Initialise using Cobb 2012 Fig 4a host proportions
-    host_props = parameters.COBB_PROP_FIG4A
-    params, _ = utils.initialise_params(params, host_props=host_props)
 
-    fitter = fitting.MixedStandFitter(setup, params)
+    tanoak_factors, beta = fit_beta(setup, params)
 
-    start = np.array([2.5, 0.4, 0.4, 0.4, 3.5, 0.3, 4.6])
-    bounds = [(1e-10, 20)] * 7
-    _, beta = fitter.fit(start, bounds, show_plot=False, tanoak_factors=tanoak_factors)
-
-    logging.info("Approximate model beta values found")
-
+    results['tanoak_beta_factors'] = tanoak_factors.tolist()
     beta_names = ['beta_1,1', 'beta_1,2', 'beta_1,3', 'beta_1,4', 'beta_12', 'beta_21', 'beta_2']
     for i, name in enumerate(beta_names):
         results[name] = beta[i]
         logging.info("%s: %f", name, beta[i])
-
     with open(filename+'.json', "w") as outfile:
         json.dump(results, outfile, indent=4)
 
