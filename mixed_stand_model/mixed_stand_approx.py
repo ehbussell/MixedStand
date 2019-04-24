@@ -32,7 +32,6 @@ class MixedStandApprox:
     A fit object is also required
     """
 
-
     def __init__(self, setup, params, fit):
         required_keys = ['state_init', 'times']
 
@@ -76,6 +75,30 @@ class MixedStandApprox:
             'control': np.array([[]]),
             'interp_kind': None
         }
+    
+    @classmethod
+    def load_optimisation_class(cls, filename):
+        """Load class from optimisation file."""
+
+        with open(filename, "rb") as infile:
+            load_obj = pickle.load(infile)
+        
+        instance = cls(load_obj['setup'], load_obj['params'], load_obj['beta'])
+        instance.optimisation = load_obj['optimisation']
+
+        return instance
+
+    @classmethod
+    def load_run_class(cls, filename):
+        """Load class from run file."""
+
+        with open(filename, "rb") as infile:
+            load_obj = pickle.load(infile)
+        
+        instance = cls(load_obj['setup'], load_obj['params'], load_obj['beta'])
+        instance.run = load_obj['run']
+
+        return instance
 
     def save_optimisation(self, filename):
         """Save control optimisation and parameters to file."""

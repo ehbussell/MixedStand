@@ -62,6 +62,18 @@ class MixedStandSimulator:
             'objective': None
         }
 
+    @classmethod
+    def load_run_class(cls, filename):
+        """Load class from run file."""
+
+        with open(filename, "rb") as infile:
+            load_obj = pickle.load(infile)
+        
+        instance = cls(load_obj['setup'], load_obj['params'])
+        instance.run = load_obj['run']
+
+        return instance
+
     def save_run(self, filename):
         """Save run_data, control and run parameters to file."""
 
