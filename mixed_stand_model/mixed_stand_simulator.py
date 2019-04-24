@@ -57,8 +57,8 @@ class MixedStandSimulator:
 
         # Object to store run results
         self.run = {
-            'state': None,
-            'control': None,
+            'state': np.array([[]]),
+            'control': np.array([[]]),
             'objective': None
         }
 

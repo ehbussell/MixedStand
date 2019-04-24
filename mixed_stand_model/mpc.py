@@ -1,7 +1,7 @@
 """Methods for running MPC strategies."""
 
 import argparse
-import pdb
+import logging
 import pickle
 import numpy as np
 
@@ -74,6 +74,8 @@ class Controller:
         sim_obj = [0.0]
 
         while current_start < end_time:
+            logging.info("Updating control at time %f", current_start)
+
             current_times = np.arange(current_start, current_end+time_step, step=time_step)
 
             # Set initial states

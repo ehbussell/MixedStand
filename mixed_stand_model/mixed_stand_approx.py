@@ -68,12 +68,12 @@ class MixedStandApprox:
             raise ValueError("Wrong format for fitted parameters!")
 
         self.run = {
-            'state': None,
-            'control': None,
+            'state': np.array([[]]),
+            'control': np.array([[]]),
             'objective': None
         }
         self.optimisation = {
-            'control': None,
+            'control': np.array([[]]),
             'interp_kind': None
         }
 
@@ -383,7 +383,7 @@ class MixedStandApprox:
 
         logging.info("Setting BOCOP parameters")
 
-        logging.info("Setting problem.bounds")
+        logging.debug("Setting problem.bounds")
 
         with open(os.path.join(folder, "problem.bounds"), "r") as infile:
             all_lines = infile.readlines()
@@ -424,7 +424,7 @@ class MixedStandApprox:
         with _try_file_open(os.path.join(folder, "problem.bounds")) as outfile:
             outfile.writelines(all_lines)
 
-        logging.info("Setting problem.constants")
+        logging.debug("Setting problem.constants")
 
         # Constant values
         with open(os.path.join(folder, "problem.constants"), "r") as infile:
@@ -480,7 +480,7 @@ class MixedStandApprox:
         with _try_file_open(os.path.join(folder, "problem.constants")) as outfile:
             outfile.writelines(all_lines)
 
-        logging.info("Setting problem.def")
+        logging.debug("Setting problem.def")
 
         with open(os.path.join(folder, "problem.def"), "r") as infile:
             all_lines = infile.readlines()
@@ -505,7 +505,7 @@ class MixedStandApprox:
 
         # State initialisation
         for state in range(16):
-            logging.info("Initialising state %i", state)
+            logging.debug("Initialising state %i", state)
             all_lines = [
                 "#Starting point file\n",
                 "# This file contains the values of the initial points\n",
@@ -526,7 +526,7 @@ class MixedStandApprox:
             control_init = np.array([init_policy(t) for t in self.setup['times'][:-1]])
 
             for control in range(9):
-                logging.info("Initialising control %i", control)
+                logging.debug("Initialising control %i", control)
                 all_lines = [
                     "#Starting point file\n",
                     "# This file contains the values of the initial points\n",
