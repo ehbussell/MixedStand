@@ -35,7 +35,7 @@ def objective_integrand(time, state, control, params):
 def objective_payoff(end_time, state, params):
     """Payoff term in objective function - Healthy large tanoak"""
 
-    state = np.sum(np.reshape(state, (-1, 15)), axis=0)
+    state = np.sum(np.reshape(state, (-1, 15)), axis=0) / (len(state)/15)
 
     payoff = - params.get('payoff_factor', 0.0) * np.exp(
         - params.get('discount_rate', 0.0) * end_time) * (
