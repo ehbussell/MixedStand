@@ -1,9 +1,13 @@
 """Methods for running MPC strategies."""
 
 import argparse
+import copy
 import logging
 import pickle
 import numpy as np
+from scipy.interpolate import interp1d
+from . import mixed_stand_simulator as ms_sim
+from . import mixed_stand_approx as ms_approx
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
@@ -14,18 +18,20 @@ if __name__ == "__main__":
 class Controller:
     """MPC Controller"""
 
-    def __init__(self, simulator, approx_model):
+    def __init__(self, setup, params, beta):
         """Model predictive controller, regular optimisations on approx model control simulator."""
 
-        self.simulator = simulator
-        self.approx_model = approx_model
+        self.setup = copy.deepcopy(setup)
+        self.params = copy.deepcopy(params)
+        self.beta = copy.deepcopy(beta)
 
-        self.run_times = None
-        self.run_state = None
-        self.run_control = None
+        self.times = np.array([])
+        self.control = np.array([[]])
 
-    def run_controller(self, horizon, time_step, end_time, update_period=None,
-                       rolling_horz=False, stage_len=None, init_policy=None):
+        self.config = {}
+
+    def optimise(self, horizon, time_step, end_time, update_period=None,
+                 rolling_horz=False, stage_len=None, init_policy=None):
         """Run simulation under MPC strategy, optimising on approximate model.
 
         ---------
@@ -39,6 +45,19 @@ class Controller:
             stage_len:      Time over which control is constant. If None this feature is disabled
 
         """
+
+        self.config = {
+            'horizon': horizon,
+            'time_step': time_step,
+            'end_time': end_time,
+            'update_period': update_period,
+            'rolling_horz': rolling_horz,
+            'stage_len': stage_len,
+            'init_policy': init_policy
+        }
+
+        approx_model = ms_approx.MixedStandApprox(self.setup, self.params, self.beta)
+        sim_model = ms_sim.MixedStandSimulator(self.setup, self.params)
 
         if update_period is None:
             next_update = np.inf
@@ -63,7 +82,7 @@ class Controller:
         current_end = horizon
         n_stages = None
 
-        state_init = self.simulator.setup['state_init']
+        state_init = sim_model.setup['state_init']
 
         all_times = [current_start]
         all_run_data = np.empty((state_init.shape[0], 1))
@@ -79,20 +98,20 @@ class Controller:
             current_times = np.arange(current_start, current_end+time_step, step=time_step)
 
             # Set initial states
-            self.simulator.setup['state_init'] = state_init
-            self.approx_model.set_state_init(state_init)
+            sim_model.setup['state_init'] = state_init
+            approx_model.set_state_init(state_init)
 
-            self.approx_model.setup['times'] = current_times
+            approx_model.setup['times'] = current_times
             if stage_len is not None:
                 n_stages = int((current_end - current_start) / stage_len)
 
-            _, current_control, _ = self.approx_model.optimise(
+            _, current_control, _ = approx_model.optimise(
                 n_stages=n_stages, init_policy=init_policy)
 
             simulation_times = np.arange(
                 current_start, np.minimum(next_update, end_time)+time_step, step=time_step)
-            self.simulator.setup['times'] = simulation_times
-            sim_state, sim_obj_final, sim_obj = self.simulator.run_policy(
+            sim_model.setup['times'] = simulation_times
+            sim_state, sim_obj_final, sim_obj = sim_model.run_policy(
                 control_policy=current_control, n_fixed_steps=None, obj_start=sim_obj[-1])
 
             current_start = next_update
@@ -108,23 +127,97 @@ class Controller:
             all_control_data = np.hstack((
                 all_control_data, np.array([current_control(t) for t in simulation_times[:-1]]).T))
 
-        all_control_data = np.hstack((
-            all_control_data, np.array([current_control(all_times[-1])]).T))
-
-        self.run_times = all_times
-        self.run_state = all_run_data
-        self.run_control = all_control_data
+        self.times = all_times
+        self.control = all_control_data
 
         return all_times, all_run_data, all_control_data, sim_obj_final
+
+    def run_control(self):
+        """Use MPC optimised control and simulation to run approx & simulation models.
+
+        State in approx model is updated to match simulation at regular intervals.
+
+        Returns (sim_run, approx_run) where individual results match output from sim/approx model
+        run_policy function.
+        """
+
+        approx_model = ms_approx.MixedStandApprox(self.setup, self.params, self.beta)
+        sim_model = ms_sim.MixedStandSimulator(self.setup, self.params)
+
+        if self.config['stage_len'] is None:
+            control_policy = interp1d(
+                self.times[:-1], self.control, kind="linear", fill_value="extrapolate")
+        else:
+            control_policy = interp1d(
+                self.times[:-1], self.control, kind="zero", fill_value="extrapolate")
+
+        # First run simulation model
+        logging.info("Running simulation model")
+        sim_model.setup['times'] = self.times
+        sim_run = sim_model.run_policy(control_policy)
+
+        # Interpolate state so can easily extract state at update times
+        sim_state_t = interp1d(self.times, sim_run[0], kind="linear", fill_value="extrapolate")
+
+        # Now loop over update periods
+        current_start = 0.0
+        obj_start = 0.0
+
+        combined_states = np.empty((15, 0))
+        combined_obj = np.empty((0))
+
+        logging.info("Running approximate model")
+        time_step = self.config['time_step']
+        update_period = self.config['update_period']
+        end_time = self.config['end_time']
+        while current_start < end_time:
+            logging.info("Updating state at time %f", current_start)
+            current_end = min(current_start+update_period, end_time)
+            current_times = np.arange(current_start, current_end+time_step, step=time_step)
+
+            approx_model.set_state_init(sim_state_t(current_start))
+            approx_model.setup['times'] = current_times
+
+            state, final_obj, obj = approx_model.run_policy(control_policy, obj_start=obj_start)
+
+            obj_start = obj[-1]
+            current_start += update_period
+            combined_states = np.hstack((combined_states, state[:, :-1]))
+            combined_obj = np.hstack((combined_obj, obj[:-1]))
+
+        combined_states = np.hstack((combined_states, state[:, -1:]))
+        combined_obj = np.hstack((combined_obj, obj[-1:]))
+
+        return (sim_run, (combined_states, final_obj, combined_obj))
 
     def save_optimisation(self, filename):
         """Save control optimisation to file."""
 
+        logging.info("Saving optiimisation to file: %s", filename)
+
         dump_obj = {
-            'times': self.run_times,
-            'state': self.run_state,
-            'control': self.run_control,
+            'times': self.times,
+            'control': self.control,
+            'config': self.config,
+            'setup': self.setup,
+            'params': self.params,
+            'beta': self.beta
         }
 
         with open(filename, "wb") as outfile:
             pickle.dump(dump_obj, outfile)
+
+    def load_optimisation(self, filename):
+        """Load control optimisation from file."""
+
+        logging.info("Loading optiimisation from file: %s", filename)
+
+        with open(filename, "rb") as infile:
+            load_obj = pickle.load(infile)
+
+        self.times = load_obj['times']
+        self.control = load_obj['control']
+        self.config = load_obj['config']
+        self.setup = load_obj['setup']
+        self.params = load_obj['params']
+        self.beta = load_obj['beta']

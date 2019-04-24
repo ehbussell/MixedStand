@@ -258,7 +258,7 @@ class MixedStandApprox:
 
         return d_state
 
-    def run_policy(self, control_policy=None, n_fixed_steps=None):
+    def run_policy(self, control_policy=None, n_fixed_steps=None, obj_start=0.0):
         """Run forward simulation using a given control policy.
 
         Function control_policy(t)
@@ -279,7 +279,7 @@ class MixedStandApprox:
 
         ts = [self.setup['times'][0]]
         xs = [self.setup['state_init']]
-        obj = [0.0]
+        obj = [obj_start]
 
         for time in self.setup['times'][1:]:
             if n_fixed_steps is not None:
