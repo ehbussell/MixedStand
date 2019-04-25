@@ -295,7 +295,7 @@ class MixedStandApprox:
 
         ode = integrate.ode(self.state_deriv)
         ode.set_integrator('lsoda', nsteps=10000, atol=1e-10, rtol=1e-8)
-        ode.set_initial_value(np.append(self.setup['state_init'], [0.0]), self.setup['times'][0])
+        ode.set_initial_value(np.append(self.setup['state_init'], [obj_start]), self.setup['times'][0])
         ode.set_f_params(control_policy)
 
         logging.debug("Starting ODE run")
@@ -307,7 +307,7 @@ class MixedStandApprox:
         for time in self.setup['times'][1:]:
             if n_fixed_steps is not None:
                 t_old_int = ts[-1]
-                state_old_int = np.append(xs[-1], [0.0])
+                state_old_int = np.append(xs[-1], [obj_start])
                 for t_int in np.linspace(ts[-1], time, n_fixed_steps+2)[1:]:
                     h = t_int - t_old_int
                     k1 = h * self.state_deriv(t_int, state_old_int, control_policy)
