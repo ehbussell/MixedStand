@@ -207,17 +207,19 @@ class Controller:
         with open(filename, "wb") as outfile:
             pickle.dump(dump_obj, outfile)
 
-    def load_optimisation(self, filename):
+    @classmethod
+    def load_optimisation(cls, filename):
         """Load control optimisation from file."""
 
-        logging.info("Loading optiimisation from file: %s", filename)
+        logging.info("Loading optimisation from file: %s", filename)
 
         with open(filename, "rb") as infile:
             load_obj = pickle.load(infile)
+        
+        instance = cls(load_obj['setup'], load_obj['params'], load_obj['beta'])
 
-        self.times = load_obj['times']
-        self.control = load_obj['control']
-        self.config = load_obj['config']
-        self.setup = load_obj['setup']
-        self.params = load_obj['params']
-        self.beta = load_obj['beta']
+        instance.times = load_obj['times']
+        instance.control = load_obj['control']
+        instance.config = load_obj['config']
+
+        return instance
