@@ -119,6 +119,12 @@ def make_plots(folder_name='param_sensitivity'):
     cmap = plt.get_cmap("tab20c")
     colours = [cmap(2.5*0.05), cmap(0.5*0.05), cmap(8.5*0.05), cmap(4.5*0.05)]
 
+    plt.rc('axes', titlesize=10)
+    plt.rc('axes', labelsize=8)
+    plt.rc('xtick', labelsize=8)
+    plt.rc('ytick', labelsize=8)
+    plt.rc('legend', fontsize=8)
+
     fig = plt.figure()
     ax = fig.add_subplot(111)
 
@@ -166,16 +172,31 @@ def make_plots(folder_name='param_sensitivity'):
     objectives = np.array(objectives) - approx_model.run['objective']
     sort_order = np.argsort(objectives)
 
-    fig = plt.figure(figsize=(8, 4))
-    gs = gridspec.GridSpec(1, 3, width_ratios=[0.2, 0.8, 5])
-    cax = fig.add_subplot(gs[0])
-    ax1 = fig.add_subplot(gs[1])
+    fig = plt.figure(figsize=(6, 4))
+    gs = gridspec.GridSpec(2, 4, width_ratios=[1, 2, 2, 2], height_ratios=[5, 1], wspace=0.7, hspace=0.4)
+    gs0 = gridspec.GridSpecFromSubplotSpec(1, 2, subplot_spec=gs[0, 0], width_ratios=[1, 2],
+                                           wspace=1.5)
+
+    cax1 = fig.add_subplot(gs0[0])
+    ax1 = fig.add_subplot(gs0[1])
     ax1.set_xticks([], [])
     ax1.set_yticks([], [])
-    ax2 = fig.add_subplot(gs[2], sharey=ax1)
-    ax2.set_yticks([], [])
-    dummy_axis = fig.add_subplot(gs[0:2], frameon=False)
+    dummy_axis = fig.add_subplot(gs0[:], frameon=False)
     dummy_axis.set_axis_off()
+
+    ax2 = fig.add_subplot(gs[0, 1], sharey=ax1)
+    ax2.set_yticks([], [])
+    cax2 = fig.add_subplot(gs[1, 1])
+
+    ax3 = fig.add_subplot(gs[0, 2], sharey=ax1)
+    ax3.set_yticks([], [])
+    cax3 = fig.add_subplot(gs[1, 2])
+
+    ax4 = fig.add_subplot(gs[0, 3], sharey=ax1)
+    ax4.set_yticks([], [])
+    cax4 = fig.add_subplot(gs[1, 3])
+
+    ax1.get_shared_y_axes().join(ax1, ax2)
 
     x, y = np.meshgrid([0, 1], range(len(sort_order)+1))
     z = np.array([objectives[sort_order]]).T
@@ -187,26 +208,39 @@ def make_plots(folder_name='param_sensitivity'):
     p1 = ax1.pcolormesh(x, y, z, cmap=cmap, vmin=vmin, vmax=vmax)
 
     ol_controls = np.array(ol_controls)
-    rgb = np.zeros((ol_controls.shape[0], ol_controls.shape[2], 3))
-    rgb[:, :, 0] = (np.sum(ol_controls[:, 0:3, :], axis=1) * params['rogue_rate'] *
-                    params['rogue_cost'] / params['max_budget'])
-    rgb[:, :, 1] = (np.sum(ol_controls[:, 3:7, :], axis=1) * params['thin_rate'] *
-                    params['thin_cost'] / params['max_budget'])
-    rgb[:, :, 2] = (np.sum(ol_controls[:, 7:, :], axis=1) * params['protect_rate'] *
-                    params['protect_cost'] / params['max_budget'])
+    roguing = (np.sum(ol_controls[:, 0:3, :], axis=1) * params['rogue_rate'] *
+               params['rogue_cost'] / params['max_budget'])
+    thinning = (np.sum(ol_controls[:, 3:7, :], axis=1) * params['thin_rate'] *
+                params['thin_cost'] / params['max_budget'])
+    protecting = (np.sum(ol_controls[:, 7:, :], axis=1) * params['protect_rate'] *
+                  params['protect_cost'] / params['max_budget'])
 
-    ax2.imshow(rgb, extent=(0, 200, 0, len(sort_order)), aspect='auto')
+    x, y = np.meshgrid(setup['times'], range(len(sort_order)+1))
+
+    p2 = ax2.pcolormesh(x, y, thinning, cmap='Greens', vmin=0, vmax=1)
+    p3 = ax3.pcolormesh(x, y, roguing, cmap='Reds', vmin=0, vmax=1)
+    p4 = ax4.pcolormesh(x, y, protecting, cmap='Blues', vmin=0, vmax=1)
 
     dummy_axis.set_title("Objective")
     ax1.set_ylabel("Parameter set")
-    ax2.set_title("Control strategy")
+
+    ax2.set_title("Thinning")
     ax2.set_xlabel("Time")
+    ax3.set_title("Roguing")
+    ax3.set_xlabel("Time")
+    ax4.set_title("Protecting")
+    ax4.set_xlabel("Time")
 
-    cbar = fig.colorbar(p1, cax=cax, extend='both', label='Difference in objective')
-    cax.yaxis.set_ticks_position('left')
-    cax.yaxis.set_label_position('left')
+    cbar1 = fig.colorbar(p1, cax=cax1, extend='both', label='Difference in objective')
+    cax1.yaxis.set_ticks_position('left')
+    cax1.yaxis.set_label_position('left')
 
-    fig.tight_layout()
+    cbar2 = fig.colorbar(p2, cax=cax2, label='Thin Expense', orientation='horizontal')
+    cbar3 = fig.colorbar(p3, cax=cax3, label='Rogue Expense', orientation='horizontal')
+    cbar4 = fig.colorbar(p4, cax=cax4, label='Protect Expense', orientation='horizontal')
+
+    gs.tight_layout(fig)
+    fig.canvas.draw()
     fig.savefig(os.path.join("figures", folder_name, "controls.pdf"), dpi=300, bbox_inches='tight')
 
     # 9. Finally, for extremes of objective difference run OL optimisation for multiple budgets and
@@ -382,7 +416,7 @@ if __name__ == "__main__":
                         help="Number of parameter sets to generate")
     parser.add_argument("-s", "--sigma", default=0.1, type=float,
                         help="Sigma to use to perturb parameter set")
-    parser.add_argument("-f", "--folder", default='',
+    parser.add_argument("-f", "--folder", default='param_sensitivity',
                         help="Folder name to save results in data and figures directory.")
     parser.add_argument("-a", "--append", action="store_true",
                         help="Flag to append to existing dataset")
@@ -394,6 +428,8 @@ if __name__ == "__main__":
     logger.setLevel('INFO')
     formatter = logging.Formatter(
         '%(levelname)s | %(asctime)s | %(name)s:%(module)s:%(lineno)d | %(message)s')
+    
+    os.makedirs(os.path.join('data', args.folder), exist_ok=True)
 
     # Create file handler with info log level
     fh = logging.FileHandler(os.path.join("data", args.folder, "param_sensitivity.log"))
