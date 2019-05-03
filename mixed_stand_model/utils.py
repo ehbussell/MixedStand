@@ -23,9 +23,8 @@ def objective_integrand(time, state, control, params):
     if div_cost != 0.0:
         state = np.sum(np.reshape(state, (-1, 15)), axis=0)
 
-        props = np.divide(np.array([np.sum(state[0:6]), np.sum(state[6:12]),
-                                    state[12] + state[13], state[14]]),
-                          np.sum(state[0:15]), out=np.zeros(4),
+        props = np.divide(np.array([np.sum(state[0:12]), state[12] + state[13], state[14]]),
+                          np.sum(state[0:15]), out=np.zeros(3),
                           where=(np.sum(state[0:15]) > 0.0))
 
         integrand += div_cost * np.sum(
@@ -51,10 +50,10 @@ def get_setup_params(base_params=None, scale_inf=True, state_init=None, host_pro
 
     if base_params is None:
         base_params = parameters.CORRECTED_PARAMS
-    
+
     if (state_init is None) and (host_props is None):
         host_props = parameters.COBB_PROP_FIG4A
-    
+
     if scale_inf:
         with open(os.path.join("data", "scale_and_fit_results.json"), "r") as infile:
             scale_and_fit_results = json.load(infile)
@@ -62,10 +61,10 @@ def get_setup_params(base_params=None, scale_inf=True, state_init=None, host_pro
         inf_keys = ['inf_tanoak_tanoak', 'inf_tanoak_to_bay', 'inf_bay_to_bay', 'inf_bay_to_tanoak']
         for key in inf_keys:
             base_params[key] *= scale_and_fit_results['sim_scaling_factor']
-    
+
     params, state_init = initialise_params(
         base_params, init_state=state_init, host_props=host_props)
-    
+
     ncells = 400
     full_state_init = np.tile(state_init, ncells)
 
@@ -100,7 +99,7 @@ def get_setup_params(base_params=None, scale_inf=True, state_init=None, host_pro
 
     params['discount_rate'] = 0.0
     params['payoff_factor'] = 1.0 / np.sum(state_init[6:12])
-    params['div_cost'] = 0.1 / (setup['times'][-1] * np.log(4))
+    params['div_cost'] = 0.1 / (setup['times'][-1] * np.log(3))
 
     return setup, params
 
