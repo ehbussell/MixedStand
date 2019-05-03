@@ -3,6 +3,7 @@
 import argparse
 import copy
 import logging
+import os
 import pickle
 import numpy as np
 from scipy.interpolate import interp1d
@@ -105,8 +106,31 @@ class Controller:
             if stage_len is not None:
                 n_stages = int((current_end - current_start) / stage_len)
 
-            _, current_control, _ = approx_model.optimise(
-                n_stages=n_stages, init_policy=init_policy)
+            _, current_control, exit_text = approx_model.optimise(n_stages=n_stages, init_policy=init_policy)
+
+            if exit_text not in ["Optimal Solution Found.", "Solved To Acceptable Level."]:
+                logging.info("Failed optimisation. Trying intialisation from previous solution.")
+                filename = os.path.join(
+                    os.path.dirname(os.path.realpath(__file__)), "BOCOP", "problem.def")
+
+                with open(filename, "r") as infile:
+                    all_lines = infile.readlines()
+                all_lines[31] = "# " + all_lines[31]
+                all_lines[32] = "# " + all_lines[32]
+                all_lines[33] = all_lines[33][2:]
+                all_lines[34] = all_lines[34][2:]
+                with ms_approx._try_file_open(filename) as outfile:
+                    outfile.writelines(all_lines)
+
+                _, current_control, exit_text = approx_model.optimise(
+                    n_stages=n_stages, init_policy=init_policy)
+                
+                all_lines[31] = all_lines[31][2:]
+                all_lines[32] = all_lines[32][2:]
+                all_lines[33] = "# " + all_lines[33]
+                all_lines[34] = "# " + all_lines[34]
+                with ms_approx._try_file_open(filename) as outfile:
+                    outfile.writelines(all_lines)
 
             simulation_times = np.arange(
                 current_start, np.minimum(next_update, end_time)+time_step, step=time_step)
