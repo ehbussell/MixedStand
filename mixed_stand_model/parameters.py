@@ -32,6 +32,7 @@ COBB_PARAMS = {
     'recruit_bay': np.nan,
     'recruit_redwood': np.nan,
 
+    'kernel_type': "nn",
     # Proportion of spores deposited within cell
     'spore_within': 1.0, # In BM code from 2012 paper spore deposition is incorrect
     'spore_between': 1.0,
@@ -76,6 +77,7 @@ CORRECTED_PARAMS = {
     'recruit_bay': np.nan,
     'recruit_redwood': np.nan,
 
+    'kernel_type': "nn",
     # Proportion of spores deposited within cell
     'spore_within': 0.5,
     'spore_between': 0.5/4.0,

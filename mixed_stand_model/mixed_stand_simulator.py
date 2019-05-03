@@ -228,91 +228,153 @@ class MixedStandSimulator:
         # hosts. i.e. dSus = B * Inf
         B = np.zeros((5*self.ncells, 5*self.ncells))
 
-        for location in range(self.ncells):
-            # Find adjacent cells
-            loc_coords = np.unravel_index(location, self.setup['landscape_dims'])
-            adjacent_coords = []
+        if self.params.get("kernel_type", "nn") == "nn":
 
-            # Can vary number of nearest neighbours - either 4 or 8
-            if self.params['num_nn'] == 4:
-                for row_change in [-1, 1]:
-                    for col_change in [0]:
-                        if not (row_change == 0 and col_change == 0):
-                            new_coord = np.add(loc_coords, (row_change, col_change))
-                            # Check inside domain:
-                            check = (
-                                (new_coord[0] >= 0 and
-                                 new_coord[0] < self.setup['landscape_dims'][0])
-                                and
-                                (new_coord[1] >= 0 and
-                                 new_coord[1] < self.setup['landscape_dims'][1]))
-                            if check:
-                                adjacent_coords.append(new_coord)
-                for row_change in [0]:
-                    for col_change in [-1, 1]:
-                        if not (row_change == 0 and col_change == 0):
-                            new_coord = np.add(loc_coords, (row_change, col_change))
-                            # Check inside domain:
-                            check = (
-                                (new_coord[0] >= 0 and
-                                 new_coord[0] < self.setup['landscape_dims'][0])
-                                and
-                                (new_coord[1] >= 0 and
-                                 new_coord[1] < self.setup['landscape_dims'][1]))
-                            if check:
-                                adjacent_coords.append(new_coord)
-            elif self.params['num_nn'] == 8:
-                for row_change in [-1, 0, 1]:
-                    for col_change in [-1, 0, 1]:
-                        if not (row_change == 0 and col_change == 0):
-                            new_coord = np.add(loc_coords, (row_change, col_change))
-                            # Check inside domain:
-                            check = (
-                                (new_coord[0] >= 0 and
-                                 new_coord[0] < self.setup['landscape_dims'][0])
-                                and
-                                (new_coord[1] >= 0 and
-                                 new_coord[1] < self.setup['landscape_dims'][1]))
-                            if check:
-                                adjacent_coords.append(new_coord)
-            else:
-                raise ValueError("Number of nearest neighbours must be 4 or 8!")
+            for location in range(self.ncells):
+                # Find adjacent cells
+                loc_coords = np.unravel_index(location, self.setup['landscape_dims'])
+                adjacent_coords = []
 
-            if adjacent_coords:
-                adjacent_locs = np.ravel_multi_index(
-                    np.array(adjacent_coords).T, self.setup['landscape_dims'])
-            else:
-                adjacent_locs = []
+                # Can vary number of nearest neighbours - either 4 or 8
+                if self.params['num_nn'] == 4:
+                    for row_change in [-1, 1]:
+                        for col_change in [0]:
+                            if not (row_change == 0 and col_change == 0):
+                                new_coord = np.add(loc_coords, (row_change, col_change))
+                                # Check inside domain:
+                                check = (
+                                    (new_coord[0] >= 0 and
+                                    new_coord[0] < self.setup['landscape_dims'][0])
+                                    and
+                                    (new_coord[1] >= 0 and
+                                    new_coord[1] < self.setup['landscape_dims'][1]))
+                                if check:
+                                    adjacent_coords.append(new_coord)
+                    for row_change in [0]:
+                        for col_change in [-1, 1]:
+                            if not (row_change == 0 and col_change == 0):
+                                new_coord = np.add(loc_coords, (row_change, col_change))
+                                # Check inside domain:
+                                check = (
+                                    (new_coord[0] >= 0 and
+                                    new_coord[0] < self.setup['landscape_dims'][0])
+                                    and
+                                    (new_coord[1] >= 0 and
+                                    new_coord[1] < self.setup['landscape_dims'][1]))
+                                if check:
+                                    adjacent_coords.append(new_coord)
+                elif self.params['num_nn'] == 8:
+                    for row_change in [-1, 0, 1]:
+                        for col_change in [-1, 0, 1]:
+                            if not (row_change == 0 and col_change == 0):
+                                new_coord = np.add(loc_coords, (row_change, col_change))
+                                # Check inside domain:
+                                check = (
+                                    (new_coord[0] >= 0 and
+                                    new_coord[0] < self.setup['landscape_dims'][0])
+                                    and
+                                    (new_coord[1] >= 0 and
+                                    new_coord[1] < self.setup['landscape_dims'][1]))
+                                if check:
+                                    adjacent_coords.append(new_coord)
+                else:
+                    raise ValueError("Number of nearest neighbours must be 4 or 8!")
 
-            # Infection of tanoak:
-            for age_class in range(4):
+                if adjacent_coords:
+                    adjacent_locs = np.ravel_multi_index(
+                        np.array(adjacent_coords).T, self.setup['landscape_dims'])
+                else:
+                    adjacent_locs = []
+
+                # Infection of tanoak:
+                for age_class in range(4):
+                    for age_class2 in range(4):
+                        B[5*location+age_class, 5*location+age_class2] += (
+                            self.params['spore_within'] * self.params['inf_tanoak_tanoak'][age_class])
+                    B[5*location+age_class, 5*location+4] += (
+                        self.params['spore_within'] * self.params['inf_bay_to_tanoak'])
+
+                    for loc2 in adjacent_locs:
+                        for age_class2 in range(4):
+                            B[5*location+age_class, 5*loc2+age_class2] += (
+                                self.params['spore_between'] *
+                                self.params['inf_tanoak_tanoak'][age_class])
+                        B[5*location+age_class, 5*loc2+4] += (
+                            self.params['spore_between'] * self.params['inf_bay_to_tanoak'])
+
+                # Infection of bay:
                 for age_class2 in range(4):
-                    B[5*location+age_class, 5*location+age_class2] += (
-                        self.params['spore_within'] * self.params['inf_tanoak_tanoak'][age_class])
-                B[5*location+age_class, 5*location+4] += (
-                    self.params['spore_within'] * self.params['inf_bay_to_tanoak'])
+                    B[5*location+4, 5*location+age_class2] += (
+                        self.params['spore_within'] * self.params['inf_tanoak_to_bay'])
+                B[5*location+4, 5*location+4] += (
+                    self.params['spore_within'] * self.params['inf_bay_to_bay'])
 
                 for loc2 in adjacent_locs:
                     for age_class2 in range(4):
-                        B[5*location+age_class, 5*loc2+age_class2] += (
-                            self.params['spore_between'] *
-                            self.params['inf_tanoak_tanoak'][age_class])
-                    B[5*location+age_class, 5*loc2+4] += (
-                        self.params['spore_between'] * self.params['inf_bay_to_tanoak'])
+                        B[5*location+4, 5*loc2+age_class2] += (
+                            self.params['spore_between'] * self.params['inf_tanoak_to_bay'])
+                    B[5*location+4, 5*loc2+4] += (
+                        self.params['spore_between'] * self.params['inf_bay_to_bay'])
 
-            # Infection of bay:
-            for age_class2 in range(4):
-                B[5*location+4, 5*location+age_class2] += (
-                    self.params['spore_within'] * self.params['inf_tanoak_to_bay'])
-            B[5*location+4, 5*location+4] += (
-                self.params['spore_within'] * self.params['inf_bay_to_bay'])
+        elif self.params.get("kernel_type", "nn") == "exp":
+            kernel_range = self.params['kernel_range']
+            # First find normalisation for kernel
+            kernel = np.zeros((2*kernel_range+1, 2*kernel_range+1))
+            for i in range(2*kernel_range+1):
+                for j in range(2*kernel_range+1):
+                    dist = np.sqrt(np.power(i-kernel_range, 2) + np.power(j-kernel_range, 2))
+                    if dist <= kernel_range:
+                        kernel[i, j] = np.exp(-dist / self.params['kernel_scale'])
+            kernel[kernel_range, kernel_range] = 0.0
 
-            for loc2 in adjacent_locs:
+            norm_factor = (1.0 - self.params['spore_within']) / np.sum(kernel)
+
+            for loc1 in range(self.ncells):
+                loc1_coords = np.unravel_index(loc1, self.setup['landscape_dims'])
+
+                # Within cell infection
+                # Infection of tanoak:
+                for age_class in range(4):
+                    for age_class2 in range(4):
+                        B[5*loc1+age_class, 5*loc1+age_class2] += (
+                            self.params['spore_within'] * self.params['inf_tanoak_tanoak'][age_class])
+                    B[5*loc1+age_class, 5*loc1+4] += (
+                        self.params['spore_within'] * self.params['inf_bay_to_tanoak'])
+
+                # Infection of bay:
                 for age_class2 in range(4):
-                    B[5*location+4, 5*loc2+age_class2] += (
-                        self.params['spore_between'] * self.params['inf_tanoak_to_bay'])
-                B[5*location+4, 5*loc2+4] += (
-                    self.params['spore_between'] * self.params['inf_bay_to_bay'])
+                    B[5*loc1+4, 5*loc1+age_class2] += (
+                        self.params['spore_within'] * self.params['inf_tanoak_to_bay'])
+                B[5*loc1+4, 5*loc1+4] += (
+                    self.params['spore_within'] * self.params['inf_bay_to_bay'])
+                
+                # Between cell dynamics
+                for loc2 in range(self.ncells):
+                    loc2_coords = np.unravel_index(loc2, self.setup['landscape_dims'])
+                    dist = np.sqrt(
+                        np.power(loc1_coords[0]-loc2_coords[0], 2) +
+                        np.power(loc1_coords[1]-loc2_coords[1], 2))
+                    if (dist == 0.0) or (dist > kernel_range):
+                        continue
+                    
+                    kernel_val = norm_factor * np.exp(-dist / self.params['kernel_scale'])
+
+                    # Infection of tanoak:
+                    for age_class in range(4):
+                        for age_class2 in range(4):
+                            B[5*loc1+age_class, 5*loc2+age_class2] += (
+                                kernel_val * self.params['inf_tanoak_tanoak'][age_class])
+                        B[5*loc1+age_class, 5*loc2+4] += (
+                            kernel_val * self.params['inf_bay_to_tanoak'])
+
+                    # Infection of bay:
+                    for age_class2 in range(4):
+                        B[5*loc1+4, 5*loc2+age_class2] += (
+                            kernel_val * self.params['inf_tanoak_to_bay'])
+                    B[5*loc1+4, 5*loc2+4] += (kernel_val * self.params['inf_bay_to_bay'])
+        
+        else:
+            raise ValueError("Unrecognised kernel type!")
 
         self._inf_matrix = B
 
@@ -439,7 +501,7 @@ class MixedStandSimulator:
             obj_start = 0.0
 
         ode = integrate.ode(self.state_deriv)
-        ode.set_integrator('lsoda', nsteps=1000, atol=1e-10, rtol=1e-8)
+        ode.set_integrator('vode', nsteps=1000, atol=1e-10, rtol=1e-8)
         ode.set_initial_value(np.append(state_init, [obj_start]), self.setup['times'][0])
         ode.set_f_params(control_policy)
 
