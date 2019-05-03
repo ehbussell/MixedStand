@@ -55,34 +55,13 @@ def main(filename):
     """Run fitting process: scale simulations and fit approximate models."""
 
     # Set parameters and initial conditions
-    params = copy.deepcopy(parameters.CORRECTED_PARAMS)
-
-    # Initialise using Cobb 2012 Fig 4a host proportions
-    host_props = parameters.COBB_PROP_FIG4A
-    params, state_init = utils.initialise_params(params, host_props=host_props)
-    state_init = np.tile(state_init, 400)
-
-    # Set initial infection level
-    init_inf_cells = [189]
-    init_inf_factor = 0.5
-    for cell_pos in init_inf_cells:
-        for i in [0, 4]:
-            state_init[cell_pos*15+3*i+1] = init_inf_factor * state_init[cell_pos*15+3*i]
-            state_init[cell_pos*15+3*i] *= (1.0 - init_inf_factor)
-
-    setup = {
-        'state_init': state_init,
-        'landscape_dims': (20, 20),
-        'times': np.linspace(0, 100, 201)
-    }
-
-    logging.info("Using landscape dimensions (%d, %d)", *setup['landscape_dims'])
-    logging.info("Using initial infection in cells %s", init_inf_cells)
-    logging.info("Using initial infection proportion %f", init_inf_factor)
+    _, old_params = utils.get_setup_params(
+        parameters.COBB_PARAMS, scale_inf=False, host_props=parameters.COBB_PROP_FIG4A)
+    setup, new_params = utils.get_setup_params(
+        parameters.CORRECTED_PARAMS, scale_inf=False, host_props=parameters.COBB_PROP_FIG4A)
 
     # First find beta scaling that gives matching time scale using corrected model
-    scaling_factor = fitting.scale_sim_model(
-        setup, parameters.COBB_PARAMS, parameters.CORRECTED_PARAMS, time_step=0.001)
+    scaling_factor = fitting.scale_sim_model(setup, old_params, new_params, time_step=0.001)
 
     logging.info("Simulation scaling factor found: %f", scaling_factor)
 
@@ -91,9 +70,8 @@ def main(filename):
     with open(filename+'.json', "w") as outfile:
         json.dump(results, outfile, indent=4)
     
-    inf_keys = ['inf_tanoak_tanoak', 'inf_tanoak_to_bay', 'inf_bay_to_bay', 'inf_bay_to_tanoak']
-    for key in inf_keys:
-        params[key] *= scaling_factor
+    setup, params = utils.get_setup_params(
+        parameters.CORRECTED_PARAMS, scale_inf=True, host_props=parameters.COBB_PROP_FIG4A)
 
     tanoak_factors, beta = fit_beta(setup, params)
 

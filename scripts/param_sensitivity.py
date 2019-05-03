@@ -271,50 +271,8 @@ def main(n_reps=10, sigma=0.1, append=False, folder_name='parameter_sensitivity'
 
     # Analysis:
     # 1. First construct default parameters (corrected and scaled Cobb)
-    with open(os.path.join("data", "scale_and_fit_results.json"), "r") as infile:
-        scale_and_fit_results = json.load(infile)
-
-    params = parameters.CORRECTED_PARAMS
-    inf_keys = ['inf_tanoak_tanoak', 'inf_tanoak_to_bay', 'inf_bay_to_bay', 'inf_bay_to_tanoak']
-    for key in inf_keys:
-        params[key] *= scale_and_fit_results['sim_scaling_factor']
-
-    # Initialise using Cobb 2012 Fig 4a host proportions
-    host_props = parameters.COBB_PROP_FIG4A
-    ncells = 400
-    params, state_init = utils.initialise_params(params, host_props=host_props)
-    state_init = np.tile(state_init, ncells)
-
-    # Initial conditions used in 2012 paper (not quite at dynamic equilibrium) for Fig 4a
-    init_inf_cells = [189]
-    init_inf_factor = 0.5
-    for cell_pos in init_inf_cells:
-        for i in [0, 4]:
-            state_init[cell_pos*15+3*i+1] = init_inf_factor * state_init[cell_pos*15+3*i]
-            state_init[cell_pos*15+3*i] *= (1.0 - init_inf_factor)
-
-    setup = {
-        'state_init': state_init,
-        'landscape_dims': (20, 20),
-        'times': np.linspace(0, 100.0, 201)
-    }
-
-    logging.info("Using landscape dimensions (%d, %d)", *setup['landscape_dims'])
-    logging.info("Using initial infection in cells %s", init_inf_cells)
-    logging.info("Using initial infection proportion %f", init_inf_factor)
-
-    params['treat_eff'] = 0.75
-    params['vaccine_decay'] = 0.5
-    params['rogue_rate'] = 0.5
-    params['thin_rate'] = 0.5
-    params['protect_rate'] = 0.25
-    params['div_cost'] = 0.001
-    params['rogue_cost'] = 1000
-    params['thin_cost'] = 1000
-    params['protect_cost'] = 200
-    params['payoff_factor'] = 1.0
-    params['discount_rate'] = 0.0
-    params['max_budget'] = 500
+    setup, params = utils.get_setup_params(
+        parameters.CORRECTED_PARAMS, scale_inf=True, host_props=parameters.COBB_PROP_FIG4A)
 
     mpc_args = {
         'horizon': 100,
@@ -406,9 +364,8 @@ def main(n_reps=10, sigma=0.1, append=False, folder_name='parameter_sensitivity'
             new_params[param_key] *= np.clip(
                 norm.rvs(loc=1, scale=sigma, size=len(new_params[param_key])), 0.0, None)
 
-        # 3. Recalculate space weights & recruitment rates to give dynamic equilibrium and get
-        #       initial state
-        new_params, _ = utils.initialise_params(new_params, host_props=host_props)
+        # 3. Recalculate space weights & recruitment rates to give dynamic equilibrium
+        new_params, _ = utils.initialise_params(new_params, host_props=parameters.COBB_PROP_FIG4A)
 
         # 4. Run simulation model with no control policy
         model = ms_sim.MixedStandSimulator(setup, new_params)

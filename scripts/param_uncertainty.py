@@ -7,11 +7,12 @@ import pickle
 import matplotlib.pyplot as plt
 from scipy.interpolate import interp1d
 from scipy.stats import truncnorm
-import mixed_stand_simulator as ms_sim
-import mixed_stand_approx as ms_approx
-import parameters
-import visualisation
-import mpc
+from mixed_stand_model import mixed_stand_simulator as ms_sim
+from mixed_stand_model import mixed_stand_approx as ms_approx
+from mixed_stand_model import parameters
+from mixed_stand_model import visualisation
+from mixed_stand_model import mpc
+from mixed_stand_model import utils
 
 def even_policy(time):
     return np.array([0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1])
@@ -172,31 +173,9 @@ def run_all():
     # Number of parameter samples for control optimisation
     n_optimisation_runs = 10
 
-    # Initial conditions used in 2012 paper (not quite at dynamic equilibrium) for Fig 4a
-    S11, S12, S13, S14, S2, S3 = parameters.COBB_INIT_FIG4A
-    state_init = np.tile([S11, 0.0, 0.0, S12, 0.0, 0.0, S13, 0.0, 0.0, S14, 0.0, 0.0, S2, 0.0, S3],
-                         400)
-    init_inf_cells = [189]
-    init_inf_factor = 1.0
-    for cell_pos in init_inf_cells:
-        for i in [0, 4]:
-            state_init[cell_pos*15+3*i+1] = init_inf_factor * state_init[cell_pos*15+3*i]
-            state_init[cell_pos*15+3*i] *= (1.0 - init_inf_factor)
-
-    setup = {
-        'state_init': state_init,
-        'landscape_dims': (20, 20),
-        'times': np.linspace(0, 100.0, 201)
-    }
-
-    params['treat_eff'] = 0.75
-    params['vaccine_decay'] = 0.5
-    params['control_rate'] = 0.5
-    params['div_cost'] = 0.0
-    params['cull_cost'] = 0.0
-    params['protect_cost'] = 0.00
-    params['payoff_factor'] = 1.0
-    params['discount_rate'] = 0.0
+    # Initial conditions used in 2012 paper
+    setup, params = utils.get_setup_params(
+        parameters.CORRECTED_PARAMS, scale_inf=True, host_props=parameters.COBB_PROP_FIG4A)
 
     mpc_args = {
         'horizon': 100,

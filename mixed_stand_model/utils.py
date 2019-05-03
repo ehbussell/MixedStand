@@ -1,8 +1,11 @@
 """Gemeral useful utilities."""
 
 from enum import IntEnum
+import json
 import logging
+import os
 import numpy as np
+from . import parameters
 
 class Species(IntEnum):
     """Host species."""
@@ -42,6 +45,64 @@ def objective_payoff(end_time, state, params):
             state[6] + state[8] + state[9] + state[11])
 
     return payoff
+
+def get_setup_params(base_params=None, scale_inf=True, state_init=None, host_props=None):
+    """Construct setup and parameters"""
+
+    if base_params is None:
+        base_params = parameters.CORRECTED_PARAMS
+    
+    if (state_init is None) and (host_props is None):
+        host_props = parameters.COBB_PROP_FIG4A
+    
+    if scale_inf:
+        with open(os.path.join("data", "scale_and_fit_results.json"), "r") as infile:
+            scale_and_fit_results = json.load(infile)
+
+        inf_keys = ['inf_tanoak_tanoak', 'inf_tanoak_to_bay', 'inf_bay_to_bay', 'inf_bay_to_tanoak']
+        for key in inf_keys:
+            base_params[key] *= scale_and_fit_results['sim_scaling_factor']
+    
+    params, state_init = initialise_params(
+        base_params, init_state=state_init, host_props=host_props)
+    
+    ncells = 400
+    full_state_init = np.tile(state_init, ncells)
+
+    init_inf_cells = [189]
+    init_inf_factor = 0.5
+    for cell_pos in init_inf_cells:
+        for i in [0, 4]:
+            full_state_init[cell_pos*15+3*i+1] = init_inf_factor * full_state_init[cell_pos*15+3*i]
+            full_state_init[cell_pos*15+3*i] *= (1.0 - init_inf_factor)
+
+    setup = {
+        'state_init': full_state_init,
+        'landscape_dims': (20, 20),
+        'times': np.linspace(0, 100.0, 201)
+    }
+
+    logging.info("Using landscape dimensions (%d, %d)", *setup['landscape_dims'])
+    logging.info("Using initial infection in cells %s", init_inf_cells)
+    logging.info("Using initial infection proportion %f", init_inf_factor)
+
+    params['treat_eff'] = 0.75
+    params['vaccine_decay'] = 0.5
+
+    params['rogue_rate'] = 0.5
+    params['thin_rate'] = 0.5
+    params['protect_rate'] = 0.25
+
+    params['rogue_cost'] = 1000
+    params['thin_cost'] = 1000
+    params['protect_cost'] = 200
+    params['max_budget'] = 500
+
+    params['discount_rate'] = 0.0
+    params['payoff_factor'] = 1.0 / np.sum(state_init[6:12])
+    params['div_cost'] = 0.1 / (setup['times'][-1] * np.log(4))
+
+    return setup, params
 
 def initialise_params(params, init_state=None, host_props=None):
     """Sets up initial conditions, space weights and recruitment rates to give dynamic equilibrium.
