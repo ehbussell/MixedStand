@@ -76,7 +76,7 @@ def shiftedColorMap(cmap, start=0, midpoint=0.5, stop=1.0, name='shiftedcmap'):
 def even_policy(time):
     return np.array([0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1])
 
-def make_plots(folder_name='param_sensitivity'):
+def make_plots(folder_name='param_sensitivity', run_mpc=False):
     """Create figures."""
 
     os.makedirs(os.path.join('figures', folder_name), exist_ok=True)
@@ -87,7 +87,7 @@ def make_plots(folder_name='param_sensitivity'):
         summary_results = json.load(infile)
 
     no_control_states = []
-    ol_controls = []
+    opt_controls = []
     for i in range(len(summary_results)):
         # No control runs
         model = ms_sim.MixedStandSimulator.load_run_class(
@@ -96,10 +96,16 @@ def make_plots(folder_name='param_sensitivity'):
         state = np.sum(np.reshape(model.run['state'], (ncells, 15, -1)), axis=0) / ncells
         no_control_states.append(state)
 
-        # OL controls
-        approx_model = ms_approx.MixedStandApprox.load_optimisation_class(
-            os.path.join("data", folder_name, "opt_control_{}.pkl".format(i)))
-        ol_controls.append(approx_model.optimisation['control'])
+        if run_mpc:
+            # MPC controls
+            mpc_controller = mpc.Controller.load_optimisation(
+                    os.path.join("data", folder_name, "mpc_control_{}.pkl".format(i)))
+            opt_controls.append(mpc_controller.control)
+        else:
+            # OL controls
+            approx_model = ms_approx.MixedStandApprox.load_optimisation_class(
+                os.path.join("data", folder_name, "opt_control_{}.pkl".format(i)))
+            opt_controls.append(approx_model.optimisation['control'])
 
     model = ms_sim.MixedStandSimulator.load_run_class(
             os.path.join("data", folder_name, "no_control_baseline.pkl"))
@@ -154,22 +160,32 @@ def make_plots(folder_name='param_sensitivity'):
     ax.set_xlabel("Time")
     ax.set_ylabel("Host Stems")
     ax.legend()
-    fig.savefig(os.path.join("figures", folder_name, "hosts.pdf"), dpi=300, bbox_inches='tight')
+    fig.savefig(os.path.join("figures", folder_name, "hosts.png"), dpi=300, bbox_inches='tight')
 
     # 8. Sorted by objective, heatmap showing control over time. Colour control by proportion
     #       of control expenditure on roguing, thinning and protecting -> mapping to rgb. Hopefully
     #       see a pattern emerge.
 
-    approx_model = ms_approx.MixedStandApprox.load_optimisation_class(
-        os.path.join("data", folder_name, "opt_control_baseline.pkl".format(i)))
-    ol_controls.append(approx_model.optimisation['control'])
-    control_policy = interp1d(setup['times'][:-1], approx_model.optimisation['control'],
-                              kind="zero", fill_value="extrapolate")
-    approx_model.run_policy(control_policy)
-
     objectives = [x['objective'] for x in summary_results]
-    objectives.append(approx_model.run['objective'])
-    objectives = np.array(objectives) - approx_model.run['objective']
+    if run_mpc:
+        mpc_controller = mpc.Controller.load_optimisation(
+            os.path.join("data", folder_name, "mpc_control_{}.pkl".format(i)))
+        opt_controls.append(mpc_controller.control)
+        sim_run, _ = mpc_controller.run_control()
+        objectives.append(sim_run[1])
+        objectives = np.array(objectives) - sim_run[1]
+    else:
+        approx_model = ms_approx.MixedStandApprox.load_optimisation_class(
+            os.path.join("data", folder_name, "opt_control_baseline.pkl".format(i)))
+        opt_controls.append(approx_model.optimisation['control'])
+        control_policy = interp1d(setup['times'][:-1], approx_model.optimisation['control'],
+                                kind="zero", fill_value="extrapolate")
+        approx_model.run_policy(control_policy)
+
+        objectives.append(approx_model.run['objective'])
+
+        objectives = np.array(objectives) - approx_model.run['objective']
+
     sort_order = np.argsort(objectives)
 
     fig = plt.figure(figsize=(6, 4))
@@ -207,12 +223,12 @@ def make_plots(folder_name='param_sensitivity'):
 
     p1 = ax1.pcolormesh(x, y, z, cmap=cmap, vmin=vmin, vmax=vmax)
 
-    ol_controls = np.array(ol_controls)
-    roguing = (np.sum(ol_controls[:, 0:3, :], axis=1) * params['rogue_rate'] *
+    opt_controls = np.array(opt_controls)
+    roguing = (np.sum(opt_controls[:, 0:3, :], axis=1) * params['rogue_rate'] *
                params['rogue_cost'] / params['max_budget'])
-    thinning = (np.sum(ol_controls[:, 3:7, :], axis=1) * params['thin_rate'] *
+    thinning = (np.sum(opt_controls[:, 3:7, :], axis=1) * params['thin_rate'] *
                 params['thin_cost'] / params['max_budget'])
-    protecting = (np.sum(ol_controls[:, 7:, :], axis=1) * params['protect_rate'] *
+    protecting = (np.sum(opt_controls[:, 7:, :], axis=1) * params['protect_rate'] *
                   params['protect_cost'] / params['max_budget'])
 
     x, y = np.meshgrid(setup['times'], range(len(sort_order)+1))
@@ -241,14 +257,14 @@ def make_plots(folder_name='param_sensitivity'):
 
     gs.tight_layout(fig)
     fig.canvas.draw()
-    fig.savefig(os.path.join("figures", folder_name, "controls.pdf"), dpi=300, bbox_inches='tight')
+    fig.savefig(os.path.join("figures", folder_name, "controls.png"), dpi=300, bbox_inches='tight')
 
     # 9. Finally, for extremes of objective difference run OL optimisation for multiple budgets and
     #       compare patterns
 
 
 
-def main(n_reps=10, sigma=0.1, append=False, folder_name='parameter_sensitivity'):
+def main(n_reps=10, sigma=0.1, append=False, folder_name='parameter_sensitivity', run_mpc=False):
     """Run sensitivity tests."""
 
     os.makedirs(os.path.join('data', folder_name), exist_ok=True)
@@ -300,6 +316,16 @@ def main(n_reps=10, sigma=0.1, append=False, folder_name='parameter_sensitivity'
     params['discount_rate'] = 0.0
     params['max_budget'] = 500
 
+    mpc_args = {
+        'horizon': 100,
+        'time_step': 0.5,
+        'end_time': 100,
+        'update_period': 20,
+        'rolling_horz': False,
+        'stage_len': 5,
+        'init_policy': None
+    }
+
     # Baseline no control run
     model = ms_sim.MixedStandSimulator(setup, params)
     model.run_policy(control_policy=None, n_fixed_steps=None)
@@ -314,9 +340,19 @@ def main(n_reps=10, sigma=0.1, append=False, folder_name='parameter_sensitivity'
         beta = np.array([scale_and_fit_results[x] for x in beta_names])
         approx_model = ms_approx.MixedStandApprox(setup, params, beta)
 
-        approx_model.optimise(n_stages=20, init_policy=even_policy)
-        approx_model.save_optimisation(
-            os.path.join("data", folder_name, "opt_control_baseline.pkl"))
+        if run_mpc:
+            _, ol_control_policy, _ = approx_model.optimise(n_stages=20, init_policy=even_policy)
+            approx_model.save_optimisation(
+                os.path.join("data", folder_name, "opt_control_baseline.pkl"))
+            mpc_args['init_policy'] = ol_control_policy
+            mpc_controller = mpc.Controller(setup, params, beta)
+            mpc_controller.optimise(**mpc_args)
+            mpc_controller.save_optimisation(
+                os.path.join("data", folder_name, "mpc_control_baseline.pkl"))
+        else:
+            approx_model.optimise(n_stages=20, init_policy=even_policy)
+            approx_model.save_optimisation(
+                os.path.join("data", folder_name, "opt_control_baseline.pkl"))
 
     # Which parameters to perturb:
     # First single numbers that can be perturbed
@@ -333,7 +369,7 @@ def main(n_reps=10, sigma=0.1, append=False, folder_name='parameter_sensitivity'
             summary_results = json.load(infile)
 
         no_control_states = []
-        ol_controls = []
+        opt_controls = []
         for i in range(len(summary_results)):
             # No control runs
             model = ms_sim.MixedStandSimulator.load_run_class(
@@ -342,17 +378,22 @@ def main(n_reps=10, sigma=0.1, append=False, folder_name='parameter_sensitivity'
             state = np.sum(np.reshape(model.run['state'], (ncells, 15, -1)), axis=0) / ncells
             no_control_states.append(state)
 
-            # OL controls
-            approx_model = ms_approx.MixedStandApprox.load_optimisation_class(
-                os.path.join("data", folder_name, "opt_control_{}.pkl".format(i)))
-            ol_controls.append(approx_model.optimisation['control'])
+            if run_mpc:
+                mpc_controller = mpc.Controller.load_optimisation(
+                    os.path.join("data", folder_name, "mpc_control_{}.pkl".format(i)))
+                opt_controls.append(mpc_controller.control)
+            else:
+                # OL controls
+                approx_model = ms_approx.MixedStandApprox.load_optimisation_class(
+                    os.path.join("data", folder_name, "opt_control_{}.pkl".format(i)))
+                opt_controls.append(approx_model.optimisation['control'])
 
         n_reps = (len(summary_results), len(summary_results)+n_reps)
     else:
         # Otherwise start afresh
         summary_results = []
         no_control_states = []
-        ol_controls = []
+        opt_controls = []
         n_reps = (0, n_reps)
 
     for i in range(*n_reps):
@@ -379,29 +420,48 @@ def main(n_reps=10, sigma=0.1, append=False, folder_name='parameter_sensitivity'
         # 5. Fit approximate model
         _, beta = scale_and_fit.fit_beta(setup, new_params)
 
-        # 6. Optimise control (open-loop)
-        approx_model = ms_approx.MixedStandApprox(setup, new_params, beta)
-        approx_model.optimise(n_stages=20, init_policy=even_policy)
-        approx_model.save_optimisation(
-            os.path.join("data", folder_name, "opt_control_{}.pkl".format(i)))
-        
-        # Run OL control to get objective
-        control_policy = interp1d(setup['times'][:-1], approx_model.optimisation['control'],
-                                  kind="zero", fill_value="extrapolate")
-        ol_controls.append(approx_model.optimisation['control'])
-        approx_model.run_policy(control_policy)
+        if run_mpc:
+            # Optimise control (MPC)
+            mpc_controller = mpc.Controller(setup, params, beta)
+            *_, sim_obj_final = mpc_controller.optimise(**mpc_args)
+            mpc_controller.save_optimisation(
+                os.path.join("data", folder_name, "mpc_control_{}.pkl".format(i)))
 
-        list_keys = ['inf_tanoak_tanoak', 'nat_mort_tanoak', 'inf_mort_tanoak', 'trans_tanoak',
-                     'recruit_tanoak', 'space_tanoak']
-        for key in list_keys:
-            new_params[key] = new_params[key].tolist()
+            list_keys = ['inf_tanoak_tanoak', 'nat_mort_tanoak', 'inf_mort_tanoak', 'trans_tanoak',
+                        'recruit_tanoak', 'space_tanoak']
+            for key in list_keys:
+                new_params[key] = new_params[key].tolist()
 
-        summary_results.append({
-            'iteration': i,
-            'params': new_params,
-            'beta': beta.tolist(),
-            'objective': approx_model.run['objective']
-        })
+            summary_results.append({
+                'iteration': i,
+                'params': new_params,
+                'beta': beta.tolist(),
+                'objective': sim_obj_final
+            })
+        else:
+            # 6. Optimise control (open-loop)
+            approx_model = ms_approx.MixedStandApprox(setup, new_params, beta)
+            approx_model.optimise(n_stages=20, init_policy=even_policy)
+            approx_model.save_optimisation(
+                os.path.join("data", folder_name, "opt_control_{}.pkl".format(i)))
+            
+            # Run OL control to get objective
+            control_policy = interp1d(setup['times'][:-1], approx_model.optimisation['control'],
+                                    kind="zero", fill_value="extrapolate")
+            opt_controls.append(approx_model.optimisation['control'])
+            approx_model.run_policy(control_policy)
+
+            list_keys = ['inf_tanoak_tanoak', 'nat_mort_tanoak', 'inf_mort_tanoak', 'trans_tanoak',
+                        'recruit_tanoak', 'space_tanoak']
+            for key in list_keys:
+                new_params[key] = new_params[key].tolist()
+
+            summary_results.append({
+                'iteration': i,
+                'params': new_params,
+                'beta': beta.tolist(),
+                'objective': approx_model.run['objective']
+            })
 
     # Write summary results to file
     with open(os.path.join("data", folder_name, "summary.json"), "w") as outfile:
@@ -422,6 +482,8 @@ if __name__ == "__main__":
                         help="Flag to append to existing dataset")
     parser.add_argument("-e", "--use_existing_data", action="store_true",
                         help="Make plots only (no new data generated)")
+    parser.add_argument("-m", "--mpc", action="store_true",
+                        help="Use MPC control scheme")
     args = parser.parse_args()
 
     logger = logging.getLogger()
@@ -444,5 +506,6 @@ if __name__ == "__main__":
     logger.addHandler(ch)
 
     if not args.use_existing_data:
-        main(n_reps=args.n_reps, append=args.append, sigma=args.sigma, folder_name=args.folder)
-    make_plots(folder_name=args.folder)
+        main(n_reps=args.n_reps, append=args.append, sigma=args.sigma, folder_name=args.folder,
+             run_mpc=args.mpc)
+    make_plots(folder_name=args.folder, run_mpc=args.mpc)
