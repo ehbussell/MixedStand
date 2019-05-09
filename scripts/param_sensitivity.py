@@ -169,36 +169,35 @@ def make_plots(folder_name='param_sensitivity', run_mpc=False):
     objectives = [x['objective'] for x in summary_results]
     if run_mpc:
         mpc_controller = mpc.Controller.load_optimisation(
-            os.path.join("data", folder_name, "mpc_control_{}.pkl".format(i)))
+            os.path.join("data", folder_name, "mpc_control_baseline.pkl"))
         opt_controls.append(mpc_controller.control)
         sim_run, _ = mpc_controller.run_control()
         objectives.append(sim_run[1])
-        objectives = np.array(objectives) - sim_run[1]
+        objectives = 100 * (np.array(objectives) - sim_run[1]) / sim_run[1]
     else:
         approx_model = ms_approx.MixedStandApprox.load_optimisation_class(
-            os.path.join("data", folder_name, "opt_control_baseline.pkl".format(i)))
+            os.path.join("data", folder_name, "opt_control_baseline.pkl"))
         opt_controls.append(approx_model.optimisation['control'])
         control_policy = interp1d(setup['times'][:-1], approx_model.optimisation['control'],
-                                kind="zero", fill_value="extrapolate")
+                                  kind="zero", fill_value="extrapolate")
         approx_model.run_policy(control_policy)
 
         objectives.append(approx_model.run['objective'])
 
-        objectives = np.array(objectives) - approx_model.run['objective']
+        objectives = (100 * (np.array(objectives) - approx_model.run['objective']) /
+                      approx_model.run['objective'])
 
     sort_order = np.argsort(objectives)
 
     fig = plt.figure(figsize=(6, 4))
-    gs = gridspec.GridSpec(2, 4, width_ratios=[1, 2, 2, 2], height_ratios=[5, 1], wspace=0.7, hspace=0.4)
-    gs0 = gridspec.GridSpecFromSubplotSpec(1, 2, subplot_spec=gs[0, 0], width_ratios=[1, 2],
+    gs = gridspec.GridSpec(2, 4, height_ratios=[5, 1], wspace=0.7, hspace=0.4)
+    gs0 = gridspec.GridSpecFromSubplotSpec(1, 3, subplot_spec=gs[0, 0], width_ratios=[1, 2, 1],
                                            wspace=1.5)
 
-    cax1 = fig.add_subplot(gs0[0])
-    ax1 = fig.add_subplot(gs0[1])
+    cax1 = fig.add_subplot(gs[1, 0])
+    ax1 = fig.add_subplot(gs0[0, 1])
     ax1.set_xticks([], [])
     ax1.set_yticks([], [])
-    dummy_axis = fig.add_subplot(gs0[:], frameon=False)
-    dummy_axis.set_axis_off()
 
     ax2 = fig.add_subplot(gs[0, 1], sharey=ax1)
     ax2.set_yticks([], [])
@@ -212,14 +211,12 @@ def make_plots(folder_name='param_sensitivity', run_mpc=False):
     ax4.set_yticks([], [])
     cax4 = fig.add_subplot(gs[1, 3])
 
-    ax1.get_shared_y_axes().join(ax1, ax2)
-
     x, y = np.meshgrid([0, 1], range(len(sort_order)+1))
     z = np.array([objectives[sort_order]]).T
 
     vmin = min(z)
     vmax = max(z)
-    cmap = shiftedColorMap(plt.get_cmap('bwr'), midpoint=1 - vmax / (vmax + abs(vmin)))
+    cmap = shiftedColorMap(plt.get_cmap('PuOr'), midpoint=1 - vmax / (vmax + abs(vmin)))
 
     p1 = ax1.pcolormesh(x, y, z, cmap=cmap, vmin=vmin, vmax=vmax)
 
@@ -237,7 +234,7 @@ def make_plots(folder_name='param_sensitivity', run_mpc=False):
     p3 = ax3.pcolormesh(x, y, roguing, cmap='Reds', vmin=0, vmax=1)
     p4 = ax4.pcolormesh(x, y, protecting, cmap='Blues', vmin=0, vmax=1)
 
-    dummy_axis.set_title("Objective")
+    ax1.set_title("Objective")
     ax1.set_ylabel("Parameter set")
 
     ax2.set_title("Thinning")
@@ -247,13 +244,22 @@ def make_plots(folder_name='param_sensitivity', run_mpc=False):
     ax4.set_title("Protecting")
     ax4.set_xlabel("Time")
 
-    cbar1 = fig.colorbar(p1, cax=cax1, extend='both', label='Difference in objective')
-    cax1.yaxis.set_ticks_position('left')
-    cax1.yaxis.set_label_position('left')
+    cbar1 = fig.colorbar(p1, cax=cax1, label='% Difference in\nobjective', orientation='horizontal',
+                         ticks=[-25, 0.0, 25, 50])
 
     cbar2 = fig.colorbar(p2, cax=cax2, label='Thin Expense', orientation='horizontal')
     cbar3 = fig.colorbar(p3, cax=cax3, label='Rogue Expense', orientation='horizontal')
     cbar4 = fig.colorbar(p4, cax=cax4, label='Protect Expense', orientation='horizontal')
+
+    ax1.set_yticks(np.arange(0, 101, 10)+0.5)
+    ax1.set_yticklabels(np.arange(100, -1, -10),
+                        fontdict={'fontsize':4, 'weight':'bold'})
+    plt.setp(ax2.get_yticklabels(), visible=False)
+    plt.setp(ax3.get_yticklabels(), visible=False)
+    plt.setp(ax4.get_yticklabels(), visible=False)
+
+    for i in np.arange(0, 101, 10):
+        ax1.axhline(y=i+0.5, xmin=0, xmax=20, c="gray", linewidth=0.25, zorder=0.0, clip_on=False)
 
     gs.tight_layout(fig)
     fig.canvas.draw()
@@ -320,7 +326,7 @@ def main(n_reps=10, sigma=0.1, append=False, folder_name='parameter_sensitivity'
     # And lists of parameters
     perturbing_params_lists = [
         'inf_tanoak_tanoak', 'nat_mort_tanoak', 'inf_mort_tanoak', 'trans_tanoak', 'recruit_tanoak']
-    
+
     if append:
         # Read in data already generated
         with open(os.path.join("data", folder_name, "summary.json"), "r") as infile:
@@ -359,9 +365,11 @@ def main(n_reps=10, sigma=0.1, append=False, folder_name='parameter_sensitivity'
         logging.info("Perturbing parameter set %d of %d with sigma %f", i+1, n_reps[1], sigma)
         new_params = copy.deepcopy(params)
         for param_key in perturbing_params_numbers:
-            new_params[param_key] *= np.clip(norm.rvs(loc=1, scale=sigma), 0.0, None)
+            new_params[param_key] = np.clip(
+                new_params[param_key] * norm.rvs(loc=1, scale=sigma), 0.0, None)
         for param_key in perturbing_params_lists:
-            new_params[param_key] *= np.clip(
+            new_params[param_key] = np.clip(
+                new_params[param_key] *
                 norm.rvs(loc=1, scale=sigma, size=len(new_params[param_key])), 0.0, None)
 
         # 3. Recalculate space weights & recruitment rates to give dynamic equilibrium
