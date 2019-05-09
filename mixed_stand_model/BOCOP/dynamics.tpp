@@ -53,8 +53,8 @@
 	double protect_rate = constants[38];
 	double treat_eff = constants[39];
 	double div_cost = constants[40];
-	double discount_rate = constants[44];
-	double vaccine_decay = constants[47];
+	double discount_rate = constants[45];
+	double vaccine_decay = constants[48];
 
 	Tdouble inf_rate = 0.0;
 	Tdouble empty_space = 1.0 - space[4] * (state[12] + state[13]) - space[5] * state[14];

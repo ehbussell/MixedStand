@@ -127,6 +127,8 @@ def plot_control(times, control_policy, params, ax=None, labels=None, colors=Non
     all_controls[4:7] *= params['rogue_rate'] * params['rogue_cost']
     all_controls[7:] *= params['protect_rate'] * params['protect_cost']
 
+    all_controls[[0, 4]] *= params['rel_small_cost']
+
     ax.stackplot(times, *all_controls, labels=labels, colors=colors, **kwargs)
 
     return ax

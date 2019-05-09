@@ -493,16 +493,17 @@ class MixedStandApprox:
         all_lines[45] = str(self.params.get('div_cost', 0.0)) + "\n"
         all_lines[46] = str(self.params.get('rogue_cost', 0.0)) + "\n"
         all_lines[47] = str(self.params.get('thin_cost', 0.0)) + "\n"
-        all_lines[48] = str(self.params.get('protect_cost', 0.0)) + "\n"
-        all_lines[49] = str(self.params.get('discount_rate', 0.0)) + "\n"
-        all_lines[50] = str(self.params.get('payoff_factor', 0.0)) + "\n"
+        all_lines[48] = str(self.params.get('rel_small_cost', 1.0)) + "\n"
+        all_lines[49] = str(self.params.get('protect_cost', 0.0)) + "\n"
+        all_lines[50] = str(self.params.get('discount_rate', 0.0)) + "\n"
+        all_lines[51] = str(self.params.get('payoff_factor', 0.0)) + "\n"
 
         if n_stages is None:
-            all_lines[51] = "0\n"
+            all_lines[52] = "0\n"
         else:
-            all_lines[51] = str(n_stages) + "\n"
+            all_lines[52] = str(n_stages) + "\n"
 
-        all_lines[52] = str(self.params.get('vaccine_decay', 0.0)) + "\n"
+        all_lines[53] = str(self.params.get('vaccine_decay', 0.0)) + "\n"
 
         with _try_file_open(os.path.join(folder, "problem.constants")) as outfile:
             outfile.writelines(all_lines)

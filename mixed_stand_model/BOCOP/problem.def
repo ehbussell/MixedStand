@@ -3,20 +3,20 @@
 
 # Initial and final time :
 time.free string none
-time.initial double 0.0
-time.final double 50.0
+time.initial double 80.0
+time.final double 100.0
 
 # Dimensions :
 state.dimension integer 16
 control.dimension integer 9
 algebraic.dimension integer 0
-parameter.dimension integer 0
-constant.dimension integer 48
+parameter.dimension integer 36
+constant.dimension integer 49
 boundarycond.dimension integer 16
-constraint.dimension integer 1
+constraint.dimension integer 10
 
 # Discretization :
-discretization.steps integer 100
+discretization.steps integer 40
 discretization.method string gauss
 
 # Optimization :
@@ -126,11 +126,12 @@ constant.39 string treat_eff
 constant.40 string div_cost
 constant.41 string rogue_cost
 constant.42 string thin_cost
-constant.43 string protect_cost
-constant.44 string discount_rate
-constant.45 string payoff_factor
-constant.46 string n_stages
-constant.47 string vaccine_decay
+constant.43 string rel_small_cost
+constant.44 string protect_cost
+constant.45 string discount_rate
+constant.46 string payoff_factor
+constant.47 string n_stages
+constant.48 string vaccine_decay
 
 # Solution file :
 solution.file string problem.sol

@@ -94,8 +94,9 @@ def get_setup_params(base_params=None, scale_inf=True, state_init=None, host_pro
 
     params['rogue_cost'] = 1000
     params['thin_cost'] = 1000
+    params['rel_small_cost'] = 0.5
     params['protect_cost'] = 200
-    params['max_budget'] = 500
+    params['max_budget'] = 400
 
     params['discount_rate'] = 0.0
     params['payoff_factor'] = 1.0 / np.sum(state_init[6:12])
