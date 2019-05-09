@@ -11,7 +11,7 @@ from mixed_stand_model import fitting
 from mixed_stand_model import parameters
 from mixed_stand_model import utils
 
-def fit_beta(setup, params):
+def fit_beta(setup, params, no_bay_dataset=None, with_bay_dataset=None):
     """Fit approx model beta values."""
 
     # First fit approximate model with Bay epidemiologically inactive
@@ -30,8 +30,8 @@ def fit_beta(setup, params):
     fitter = fitting.MixedStandFitter(model_setup, model_params)
 
     start = np.array([2.5, 0.4, 0.4, 0.4, 0.0, 0.0, 0.0])
-    bounds = [(1e-10, 20)] * 4 + [(0, 0)] *3
-    _, beta = fitter.fit(start, bounds, show_plot=False)
+    bounds = [(1e-10, 20)] * 4 + [(0, 0)] * 3
+    _, beta = fitter.fit(start, bounds, show_plot=False, dataset=no_bay_dataset)
 
     logging.info("Completed fit with Bay inactive")
 
@@ -44,7 +44,8 @@ def fit_beta(setup, params):
 
     start = np.array([2.5, 0.4, 0.4, 0.4, 3.5, 0.3, 4.6])
     bounds = [(1e-10, 20)] * 7
-    _, beta = fitter.fit(start, bounds, show_plot=False, tanoak_factors=tanoak_factors)
+    _, beta = fitter.fit(start, bounds, show_plot=False, tanoak_factors=tanoak_factors,
+                         dataset=with_bay_dataset)
 
     logging.info("Approximate model beta values found")
     logging.info("Beta: %s", beta)
