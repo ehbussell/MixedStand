@@ -369,7 +369,11 @@ class MixedStandApprox:
 
         if verbose is True:
             logging.info("Running BOCOP verbosely")
-            subprocess.run([os.path.join(bocop_dir, "bocop.exe")], cwd=bocop_dir)
+            old_dir = os.getcwd()
+            os.chdir(bocop_dir)
+            subprocess.call("bocop.exe")
+            os.chdir(old_dir)
+            # subprocess.run([os.path.join(bocop_dir, "bocop.exe")], cwd=bocop_dir, shell=True)
         else:
             logging.info("Running BOCOP quietly")
             subprocess.run([os.path.join(bocop_dir, "bocop.exe")],
