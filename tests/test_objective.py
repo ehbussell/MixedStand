@@ -34,7 +34,7 @@ class TestObjCalculation(unittest.TestCase):
 
         expected_payoff = - (
             params['payoff_factor'] * np.exp(-params['discount_rate'] * final_time) *
-            np.sum([np.sum(state[x::15] for x in [6, 8, 9, 11])]))
+            np.sum([np.sum(state[x::15] for x in [6, 8, 9, 11])])) / ncells
 
         self.assertAlmostEqual(payoff, expected_payoff)
 
@@ -52,8 +52,7 @@ class TestObjCalculation(unittest.TestCase):
 
         integrand = utils.objective_integrand(time, state, control, params)
 
-        state_props = np.array([np.sum(state[0:6]) / np.sum(state),
-                                np.sum(state[6:12]) / np.sum(state),
+        state_props = np.array([np.sum(state[0:12]) / np.sum(state),
                                 np.sum(state[12:14]) / np.sum(state),
                                 np.sum(state[14]) / np.sum(state)])
 
@@ -68,10 +67,9 @@ class TestObjCalculation(unittest.TestCase):
 
         integrand = utils.objective_integrand(time, state, control, params)
 
-        state = np.sum(np.reshape(state, (ncells, 15)), axis=0)
+        state = np.sum(np.reshape(state, (ncells, 15)), axis=0) / ncells
 
-        state_props = np.array([np.sum(state[0:6]) / np.sum(state),
-                                np.sum(state[6:12]) / np.sum(state),
+        state_props = np.array([np.sum(state[0:12]) / np.sum(state),
                                 np.sum(state[12:14]) / np.sum(state),
                                 np.sum(state[14]) / np.sum(state)])
 

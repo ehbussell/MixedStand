@@ -17,9 +17,11 @@ class TestOptimiser(unittest.TestCase):
 
         self.params = parameters.CORRECTED_PARAMS
 
-        S11, S12, S13, S14, S2, S3 = parameters.COBB_INIT_FIG4A
-        state_init = np.array([399*S11/400, S11/400, 0.0, S12, 0.0, 0.0, S13, 0.0, 0.0,
-                               S14, 0.0, 0.0, 399*S2/400, S2/400, S3])
+        state_init = parameters.COBB_INIT_FIG4A
+        state_init[1] = state_init[0]/400
+        state_init[0] *= 399/400
+        state_init[13] = state_init[12]/400
+        state_init[12] *= 399/400
 
         # Now initialise space weights and recruitment rates
         self.params, state_init = utils.initialise_params(self.params, init_state=state_init)
@@ -29,7 +31,7 @@ class TestOptimiser(unittest.TestCase):
             'times': np.linspace(0, 50.0, 101)
         }
 
-        beta = np.array([1.67, 0.692*1.67, 0.551*1.67, 0.411*1.67, 1.608, 0.0, 4.443])
+        beta = 0.5 * np.array([0.88, 0.81, 0.65, 0.48, 5.88, 0.0, 7.37])
 
         self.params['inf_tanoak_tanoak'] = beta[0:4]
         self.params['inf_bay_to_tanoak'] = beta[4]

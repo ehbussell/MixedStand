@@ -52,9 +52,7 @@ class TestNonSpatialRates(unittest.TestCase):
     """Test calculations of state derivatives when system is non-spatial."""
 
     def setUp(self):
-        S11, S12, S13, S14, S2, S3 = parameters.COBB_INIT_FIG4A
-        state_init = np.tile([
-            S11, 0.0, 0.0, S12, 0.0, 0.0, S13, 0.0, 0.0, S14, 0.0, 0.0, S2, 0.0, S3], 1)
+        state_init = parameters.COBB_INIT_FIG4A
 
         setup = {
             'state_init': state_init,
@@ -343,9 +341,7 @@ class TestControlRates(unittest.TestCase):
     """Test calculations of state derivatives when system is under control."""
 
     def setUp(self):
-        S11, S12, S13, S14, S2, S3 = parameters.COBB_INIT_FIG4A
-        state_init = np.tile([
-            S11, 0.0, 0.0, S12, 0.0, 0.0, S13, 0.0, 0.0, S14, 0.0, 0.0, S2, 0.0, S3], 1)
+        state_init = parameters.COBB_INIT_FIG4A
 
         setup = {
             'state_init': state_init,
