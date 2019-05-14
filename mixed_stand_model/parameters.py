@@ -77,11 +77,10 @@ CORRECTED_PARAMS = {
     'recruit_bay': np.nan,
     'recruit_redwood': np.nan,
 
-    'kernel_type': "nn",
-    # Proportion of spores deposited within cell
+    'kernel_type': 'exp',
     'spore_within': 0.5,
-    'spore_between': 0.5/4.0,
-    'num_nn': 4, # Either 4 nearest neighbours or 8, 4 used in 2012 paper, 8 used in SODDr
+    'kernel_range': 10,
+    'kernel_scale': 0.5,
 
     # Tanoak reprouting probability
     'resprout_tanoak': 0.5,
