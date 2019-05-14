@@ -2,6 +2,7 @@
 
 import argparse
 import copy
+import csv
 import json
 import logging
 import os
@@ -10,6 +11,7 @@ import numpy as np
 from mixed_stand_model import fitting
 from mixed_stand_model import parameters
 from mixed_stand_model import utils
+from mixed_stand_model import mixed_stand_simulator as ms_sim
 
 def fit_beta(setup, params, no_bay_dataset=None, with_bay_dataset=None):
     """Fit approx model beta values."""
@@ -70,7 +72,7 @@ def main(filename):
     results = {'sim_scaling_factor': scaling_factor}
     with open(filename+'.json', "w") as outfile:
         json.dump(results, outfile, indent=4)
-    
+
     setup, params = utils.get_setup_params(
         parameters.CORRECTED_PARAMS, scale_inf=True, host_props=parameters.COBB_PROP_FIG4A)
 
@@ -84,12 +86,45 @@ def main(filename):
     with open(filename+'.json', "w") as outfile:
         json.dump(results, outfile, indent=4)
 
+def run_scan(filename):
+    """Scan over scaling factors."""
+
+    factors = np.arange(0.5, 5.05, 0.05)
+
+    setup, new_params = utils.get_setup_params(
+        parameters.CORRECTED_PARAMS, scale_inf=False, host_props=parameters.COBB_PROP_FIG4A)
+    setup['times'] = np.arange(0, 300, step=0.001)
+
+    cross_over_times = []
+
+    for factor in factors:
+        params = copy.deepcopy(new_params)
+        params['inf_tanoak_tanoak'] *= factor
+        params['inf_bay_to_bay'] *= factor
+        params['inf_bay_to_tanoak'] *= factor
+        params['inf_tanoak_to_bay'] *= factor
+        model = ms_sim.MixedStandSimulator(setup, params)
+
+        sim_run, *_ = model.run_policy(control_policy=None)
+        logging.info("Done sim")
+        cross_over_time = fitting._get_crossover_time(sim_run, model.ncells, setup['times'])
+        cross_over_times.append(cross_over_time)
+
+        logging.info("Factor: %f, cross-over time: %f", factor, cross_over_time)
+
+    csv_file = filename + '_scan.csv'
+    with open(csv_file, 'w', newline='') as csvfile:
+        spamwriter = csv.writer(csvfile, delimiter=',', quotechar='|', quoting=csv.QUOTE_MINIMAL)
+        spamwriter.writerow(['ScalingFactor', 'CrossOverTime'])
+        for i, factor in enumerate(factors):
+            spamwriter.writerow([factor, cross_over_times[i]])
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter)
-
+    parser.add_argument("-s", "--scan", action="store_true",
+                        help="Run full scan over scaling values")
     args = parser.parse_args()
 
     filepath = os.path.join(os.path.realpath(__file__), '..', '..', 'data', 'scale_and_fit_results')
@@ -98,7 +133,7 @@ if __name__ == "__main__":
     logger = logging.getLogger()
     logger.setLevel(logging.INFO)
     # create file handler which logs info messages
-    fh = logging.FileHandler(filepath+'.log', mode='w')
+    fh = logging.FileHandler(filepath+'.log')
     fh.setLevel(logging.INFO)
     # create console handler with a higher log level
     ch = logging.StreamHandler()
@@ -112,6 +147,9 @@ if __name__ == "__main__":
     logger.addHandler(ch)
     logger.addHandler(fh)
 
-    main(filepath)
+    if args.scan:
+        run_scan(filepath)
+    else:
+        main(filepath)
 
     logging.info("Script completed")
