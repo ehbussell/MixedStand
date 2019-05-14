@@ -34,7 +34,7 @@ def scale_sim_model(setup, old_params, new_params, lower_bound=None, upper_bound
     if time_step is None:
         time_step = 0.01
         logging.info("No time step set, using %f", time_step)
-    
+
     model_setup = copy.deepcopy(setup)
     model_setup['times'] = np.arange(0, 50, step=time_step)
 
@@ -65,6 +65,7 @@ def scale_sim_model(setup, old_params, new_params, lower_bound=None, upper_bound
     params['inf_tanoak_tanoak'] *= new_factor
     params['inf_bay_to_bay'] *= new_factor
     params['inf_bay_to_tanoak'] *= new_factor
+    params['inf_tanoak_to_bay'] *= new_factor
     model = ms_sim.MixedStandSimulator(model_setup, params)
     sim_run, *_ = model.run_policy(control_policy=None)
 
@@ -92,6 +93,7 @@ def scale_sim_model(setup, old_params, new_params, lower_bound=None, upper_bound
         params['inf_tanoak_tanoak'] *= new_factor
         params['inf_bay_to_bay'] *= new_factor
         params['inf_bay_to_tanoak'] *= new_factor
+        params['inf_tanoak_to_bay'] *= new_factor
 
         model = ms_sim.MixedStandSimulator(model_setup, params)
         sim_run, *_ = model.run_policy(control_policy=None)
