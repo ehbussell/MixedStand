@@ -1,5 +1,6 @@
 """Gemeral useful utilities."""
 
+import copy
 from enum import IntEnum
 import json
 import logging
@@ -55,7 +56,9 @@ def get_setup_params(base_params=None, scale_inf=True, state_init=None, host_pro
         host_props = parameters.COBB_PROP_FIG4A
 
     if scale_inf:
-        with open(os.path.join("data", "scale_and_fit_results.json"), "r") as infile:
+        filename = os.path.join(
+            os.path.dirname(os.path.realpath(__file__)), "..", "data", "scale_and_fit_results.json")
+        with open(filename, "r") as infile:
             scale_and_fit_results = json.load(infile)
 
         inf_keys = ['inf_tanoak_tanoak', 'inf_tanoak_to_bay', 'inf_bay_to_bay', 'inf_bay_to_tanoak']
@@ -124,6 +127,8 @@ def initialise_params(params, init_state=None, host_props=None):
 
     Note values that are not NaN will not be overwritten apart from b11 in new method.
     """
+
+    params = copy.deepcopy(params)
 
     if init_state is None and host_props is None:
         raise RuntimeError("Must specify either state and proportions!")
