@@ -508,15 +508,16 @@ class MixedStandSimulator:
         logging.info("Starting ODE run")
 
         ts = [self.setup['times'][0]]
-        xs = [state_init]
+        state = np.zeros((len(state_init), len(self.setup['times'])))
+        state[:, 0] = state_init
         obj = [obj_start]
 
         # Loop over times and advance ODE system
-        for time in self.setup['times'][1:]:
+        for i, time in enumerate(self.setup['times'][1:]):
             if n_fixed_steps is not None:
                 # Use fixed steps
                 t_old_int = ts[-1]
-                state_old_int = np.append(xs[-1], obj[-1])
+                state_old_int = np.append(state[i], obj[-1])
                 for t_int in np.linspace(ts[-1], time, n_fixed_steps+2)[1:]:
                     h = t_int - t_old_int
                     k1 = h * self.state_deriv(t_int, state_old_int, control_policy)
@@ -530,7 +531,7 @@ class MixedStandSimulator:
                                             0.0, None)
                     t_old_int = t_int
 
-                xs.append(state_old_int[:-1])
+                state[:, i+1] = state_old_int[:-1]
                 obj.append(state_old_int[-1])
                 ts.append(time)
 
@@ -539,7 +540,7 @@ class MixedStandSimulator:
                 if ode.successful():
                     ode.integrate(time)
                     ts.append(ode.t)
-                    xs.append(ode.y[:-1])
+                    state[:, i+1] = ode.y[:-1]
                     obj.append(ode.y[-1])
                 else:
                     logging.error("ODE solver error!")
@@ -547,13 +548,11 @@ class MixedStandSimulator:
 
         logging.info("ODE run completed")
 
-        state = np.vstack(xs).T
-
         self.run['state'] = state
         if control_policy is None:
             self.run['control'] = None
         else:
             self.run['control'] = np.array([control_policy(t) for t in self.setup['times']]).T
-        self.run['objective'] = utils.objective_payoff(ts[-1], xs[-1], self.params) + obj[-1]
+        self.run['objective'] = utils.objective_payoff(ts[-1], state[:, -1], self.params) + obj[-1]
 
         return state, self.run['objective'], obj
