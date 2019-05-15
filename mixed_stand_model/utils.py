@@ -51,6 +51,7 @@ def get_setup_params(base_params=None, scale_inf=True, state_init=None, host_pro
 
     if base_params is None:
         base_params = parameters.CORRECTED_PARAMS
+    base_params = copy.deepcopy(base_params)
 
     if (state_init is None) and (host_props is None):
         host_props = parameters.COBB_PROP_FIG4A
@@ -138,6 +139,8 @@ def initialise_params(params, init_state=None, host_props=None):
 
     if init_state is not None:
         logging.info("Initialising using method from Cobb 2012 paper.")
+
+        init_state = copy.deepcopy(init_state)
 
         # Initialise rates s.t. if initial state was disease free, it is in dynamic equilibrium
         # Follows calculation in Cobb (2012)
