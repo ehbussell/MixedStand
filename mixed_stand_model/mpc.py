@@ -31,8 +31,11 @@ class Controller:
 
         self.config = {}
 
-    def optimise(self, horizon, time_step, end_time, update_period=None,
-                 rolling_horz=False, stage_len=None, init_policy=None, use_init_first=False):
+        # For storing initialisation states when imperfect observer is used.
+        self.approx_update_states = np.array([])
+
+    def optimise(self, horizon, time_step, end_time, update_period=None, rolling_horz=False,
+                 stage_len=None, init_policy=None, use_init_first=False, observer=None):
         """Run simulation under MPC strategy, optimising on approximate model.
 
         ---------
@@ -57,7 +60,14 @@ class Controller:
             'init_policy': init_policy
         }
 
-        approx_model = ms_approx.MixedStandApprox(self.setup, self.params, self.beta)
+        if observer is not None:
+            approx_setup = copy.deepcopy(self.setup)
+            approx_setup['state_init'] = observer(self.setup['state_init'])
+            self.approx_update_states = np.array([approx_setup['state_init']])
+            approx_model = ms_approx.MixedStandApprox(approx_setup, self.params, self.beta)
+        else:
+            approx_model = ms_approx.MixedStandApprox(self.setup, self.params, self.beta)
+
         sim_model = ms_sim.MixedStandSimulator(self.setup, self.params)
 
         if update_period is None:
@@ -100,7 +110,12 @@ class Controller:
 
             # Set initial states
             sim_model.setup['state_init'] = state_init
-            approx_model.set_state_init(state_init)
+            if observer is None:
+                approx_model.set_state_init(state_init)
+            else:
+                approx_model.set_state_init(observer(state_init))
+                self.approx_update_states = np.vstack(
+                    self.approx_update_states, approx_model.setup['state_init'])
 
             approx_model.setup['times'] = current_times
             if stage_len is not None:
