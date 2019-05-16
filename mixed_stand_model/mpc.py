@@ -32,7 +32,7 @@ class Controller:
         self.config = {}
 
     def optimise(self, horizon, time_step, end_time, update_period=None,
-                 rolling_horz=False, stage_len=None, init_policy=None):
+                 rolling_horz=False, stage_len=None, init_policy=None, use_init_first=False):
         """Run simulation under MPC strategy, optimising on approximate model.
 
         ---------
@@ -106,10 +106,15 @@ class Controller:
             if stage_len is not None:
                 n_stages = int((current_end - current_start) / stage_len)
 
-            _, current_control, exit_text = approx_model.optimise(n_stages=n_stages, init_policy=init_policy)
+            if (current_start == 0.0) and use_init_first:
+                current_control = init_policy
+                exit_text = "Optimal Solution Found."
+            else:
+                _, current_control, exit_text = approx_model.optimise(
+                    n_stages=n_stages, init_policy=init_policy)
 
             if exit_text not in ["Optimal Solution Found.", "Solved To Acceptable Level."]:
-                logging.info("Failed optimisation. Trying intialisation from previous solution.")
+                logging.warning("Failed optimisation. Trying intialisation from previous solution.")
                 filename = os.path.join(
                     os.path.dirname(os.path.realpath(__file__)), "BOCOP", "problem.def")
 
@@ -124,13 +129,17 @@ class Controller:
 
                 _, current_control, exit_text = approx_model.optimise(
                     n_stages=n_stages, init_policy=init_policy)
-                
+
                 all_lines[31] = all_lines[31][2:]
                 all_lines[32] = all_lines[32][2:]
                 all_lines[33] = "# " + all_lines[33]
                 all_lines[34] = "# " + all_lines[34]
                 with ms_approx._try_file_open(filename) as outfile:
                     outfile.writelines(all_lines)
+
+                if exit_text not in ["Optimal Solution Found.", "Solved To Acceptable Level."]:
+                    logging.error("Failed optimisation. Falling back to init policy.")
+                    current_control = init_policy
 
             simulation_times = np.arange(
                 current_start, np.minimum(next_update, end_time)+time_step, step=time_step)
@@ -239,7 +248,7 @@ class Controller:
 
         with open(filename, "rb") as infile:
             load_obj = pickle.load(infile)
-        
+
         instance = cls(load_obj['setup'], load_obj['params'], load_obj['beta'])
 
         instance.times = load_obj['times']
