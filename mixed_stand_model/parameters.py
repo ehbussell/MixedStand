@@ -53,7 +53,7 @@ CORRECTED_PARAMS = {
     'inf_tanoak_tanoak': np.array([0.33, 0.32, 0.30, 0.24]), # Cobb version
     'inf_bay_to_bay': 1.33,
     'inf_bay_to_tanoak': 1.46,
-    'inf_tanoak_to_bay': 0.30,
+    'inf_tanoak_to_bay': 0.05,
 
     # Natural mortality rates
     'nat_mort_tanoak': np.array([0.0061, 0.0031, 0.0011, 0.032]),

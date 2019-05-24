@@ -15,25 +15,27 @@ class Species(IntEnum):
     REDWOOD = 2
 
 def objective_integrand(time, state, control, params):
-    """Integrand of objective function, including control costs and diversity costs."""
+    """Integrand of objective function, made up of control costs and diversity costs."""
 
-    integrand = 0.0
+    div_costs = 0.0
+    div_factor = params.get('div_cost', 0.0)
 
-    div_cost = params.get('div_cost', 0.0)
+    control_costs = 0.0
+    control_factor = params.get('control_cost', 0.0)
 
-    if div_cost != 0.0:
+    if div_factor != 0.0:
         state = np.sum(np.reshape(state, (-1, 15)), axis=0)
 
         props = np.divide(np.array([np.sum(state[0:12]), state[12] + state[13], state[14]]),
                           np.sum(state[0:15]), out=np.zeros(3),
                           where=(np.sum(state[0:15]) > 0.0))
 
-        integrand += div_cost * np.sum(
+        div_costs += div_factor * np.sum(
             props * np.log(props, out=np.zeros_like(props), where=(props > 0.0)))
 
-    integrand *= np.exp(- params.get('discount_rate', 0.0) * time)
+    div_costs *= np.exp(- params.get('discount_rate', 0.0) * time)
 
-    return integrand
+    return div_costs
 
 def objective_payoff(end_time, state, params):
     """Payoff term in objective function - Healthy large tanoak"""
@@ -46,7 +48,7 @@ def objective_payoff(end_time, state, params):
 
     return payoff
 
-def get_setup_params(base_params=None, scale_inf=True, state_init=None, host_props=None):
+def get_setup_params(base_params=None, scale_inf=True, state_init=None, host_props=None, inf=True):
     """Construct setup and parameters"""
 
     if base_params is None:
@@ -72,12 +74,14 @@ def get_setup_params(base_params=None, scale_inf=True, state_init=None, host_pro
     ncells = 400
     full_state_init = np.tile(state_init, ncells)
 
-    init_inf_cells = [189]
-    init_inf_factor = 0.5
-    for cell_pos in init_inf_cells:
-        for i in [0, 4]:
-            full_state_init[cell_pos*15+3*i+1] = init_inf_factor * full_state_init[cell_pos*15+3*i]
-            full_state_init[cell_pos*15+3*i] *= (1.0 - init_inf_factor)
+    if inf:
+        init_inf_cells = [189]
+        init_inf_factor = 0.5
+        for cell_pos in init_inf_cells:
+            for i in [0, 4]:
+                full_state_init[cell_pos*15+3*i+1] = (
+                    init_inf_factor * full_state_init[cell_pos*15+3*i])
+                full_state_init[cell_pos*15+3*i] *= (1.0 - init_inf_factor)
 
     setup = {
         'state_init': full_state_init,
@@ -86,8 +90,11 @@ def get_setup_params(base_params=None, scale_inf=True, state_init=None, host_pro
     }
 
     logging.info("Using landscape dimensions (%d, %d)", *setup['landscape_dims'])
-    logging.info("Using initial infection in cells %s", init_inf_cells)
-    logging.info("Using initial infection proportion %f", init_inf_factor)
+    if inf:
+        logging.info("Using initial infection in cells %s", init_inf_cells)
+        logging.info("Using initial infection proportion %f", init_inf_factor)
+    else:
+        logging.info("Using no infection")
 
     params['treat_eff'] = 0.75
     params['vaccine_decay'] = 0.5
@@ -100,11 +107,11 @@ def get_setup_params(base_params=None, scale_inf=True, state_init=None, host_pro
     params['thin_cost'] = 1000
     params['rel_small_cost'] = 0.5
     params['protect_cost'] = 200
-    params['max_budget'] = 400
+    params['max_budget'] = 600
 
     params['discount_rate'] = 0.0
     params['payoff_factor'] = 1.0 / np.sum(state_init[6:12])
-    params['div_cost'] = 0.1 / (setup['times'][-1] * np.log(3))
+    params['div_cost'] = 0.25 / (setup['times'][-1] * np.log(3))
 
     return setup, params
 

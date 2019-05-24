@@ -44,11 +44,14 @@ def plot_hosts(times, model_run, ax=None, combine_ages=True, proportions=True, *
 
     if 'labels' in kwargs:
         names = kwargs.pop('labels')
+    
+    lines = []
 
     for state, colour, name in zip(states, colours, names):
-        ax.plot(times, state, color=colour, label=name, **kwargs)
+        l, = ax.plot(times, state, color=colour, label=name, **kwargs)
+        lines.append(l)
 
-    return ax
+    return ax, lines
 
 def plot_dpcs(times, model_run, ax=None, combine_ages=True, proportions=True, **kwargs):
     """Plot disease progress curves.
@@ -87,11 +90,14 @@ def plot_dpcs(times, model_run, ax=None, combine_ages=True, proportions=True, **
 
     if 'labels' in kwargs:
         names = kwargs.pop('labels')
+    
+    lines = []
 
     for state, colour, name in zip(states, colours, names):
-        ax.plot(times, state, color=colour, label=name, **kwargs)
+        l1, = ax.plot(times, state, color=colour, label=name, **kwargs)
+        lines.append(l1)
 
-    return ax
+    return ax, lines
 
 def plot_control(times, control_policy, params, ax=None, labels=None, colors=None, **kwargs):
     """Plot given control strategy."""
@@ -123,6 +129,9 @@ def plot_control(times, control_policy, params, ax=None, labels=None, colors=Non
     all_controls[[0, 4]] *= params['rel_small_cost']
 
     ax.stackplot(times, *all_controls, labels=labels, colors=colors, step='post', **kwargs)
+
+    for _, side in ax.spines.items():
+        side.set_linewidth(0.1)
 
     return ax
 

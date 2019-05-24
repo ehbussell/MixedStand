@@ -13,7 +13,7 @@ from mixed_stand_model import parameters
 from mixed_stand_model import utils
 from mixed_stand_model import mixed_stand_simulator as ms_sim
 
-def fit_beta(setup, params, no_bay_dataset=None, with_bay_dataset=None):
+def fit_beta(setup, params, no_bay_dataset=None, with_bay_dataset=None, start=None):
     """Fit approx model beta values."""
 
     # First fit approximate model with Bay epidemiologically inactive
@@ -31,21 +31,23 @@ def fit_beta(setup, params, no_bay_dataset=None, with_bay_dataset=None):
 
     fitter = fitting.MixedStandFitter(model_setup, model_params)
 
-    start = np.array([2.5, 0.4, 0.4, 0.4, 0.0, 0.0, 0.0])
-    bounds = [(1e-10, 20)] * 4 + [(0, 0)] * 3
+    if start is None:
+        start = np.array([0.6, 0.6, 0.5, 0.4, 0.0, 0.0, 0.0])
+    bounds = [(0.05, 20)] * 4 + [(0, 0)] * 3
     _, beta = fitter.fit(start, bounds, show_plot=False, dataset=no_bay_dataset)
 
     logging.info("Completed fit with Bay inactive")
 
     tanoak_factors = beta[1:4] / beta[0]
 
-    logging.info("Tanoak relative infection rates: %s", tanoak_factors)
+    logging.info("Tanoak infection rates: %s", tanoak_factors)
 
     model_params = copy.deepcopy(params)
     fitter = fitting.MixedStandFitter(model_setup, model_params)
 
-    start = np.array([2.5, 0.4, 0.4, 0.4, 3.5, 0.3, 4.6])
-    bounds = [(1e-10, 20)] * 7
+    if start is None:
+        start = np.array([0.6, 0.6, 0.4, 0.3, 4.0, 0.15, 4.0])
+    bounds = [(0.05, 20)] * 7
     _, beta = fitter.fit(start, bounds, show_plot=False, tanoak_factors=tanoak_factors,
                          dataset=with_bay_dataset)
 
@@ -72,6 +74,8 @@ def main(filename):
     results = {'sim_scaling_factor': scaling_factor}
     with open(filename+'.json', "w") as outfile:
         json.dump(results, outfile, indent=4)
+    # with open(filename+'.json', "r") as infile:
+    #     results = json.load(infile)
 
     setup, params = utils.get_setup_params(
         parameters.CORRECTED_PARAMS, scale_inf=True, host_props=parameters.COBB_PROP_FIG4A)

@@ -192,9 +192,11 @@ class MixedStandFitter:
 
         # Minimise SSE
         param_fit_transformed = minimize(
-            self._sse, start_transformed, method="Nelder-Mead",
-            options={'ftol': 1e-6, 'disp': True},
+            self._sse, start_transformed, method="BFGS",
+            options={'disp': True, 'maxiter': 2800},
             args=(inf_data, approx_model, bounds, scaling_matrix))
+        
+        logging.info("%s", param_fit_transformed)
 
         param_fit = _reverse_logit_transform(param_fit_transformed.x, bounds)
         if self.tanoak_factors is not None:
