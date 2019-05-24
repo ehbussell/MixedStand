@@ -60,15 +60,12 @@ class Controller:
             'init_policy': init_policy
         }
 
-        if observer is not None:
-            approx_setup = copy.deepcopy(self.setup)
-            approx_setup['state_init'] = observer(self.setup['state_init'])
-            self.approx_update_states = np.array([approx_setup['state_init']])
-            approx_model = ms_approx.MixedStandApprox(approx_setup, self.params, self.beta)
-        else:
-            approx_model = ms_approx.MixedStandApprox(self.setup, self.params, self.beta)
+        approx_model = ms_approx.MixedStandApprox(self.setup, self.params, self.beta)
 
         sim_model = ms_sim.MixedStandSimulator(self.setup, self.params)
+
+        if observer is not None:
+            self.approx_update_states = np.zeros((0, 15))
 
         if update_period is None:
             next_update = np.inf
@@ -92,6 +89,7 @@ class Controller:
         current_start = 0.0
         current_end = horizon
         n_stages = None
+        ncells = np.product(self.setup['landscape_dims'])
 
         state_init = sim_model.setup['state_init']
 
@@ -110,18 +108,22 @@ class Controller:
 
             # Set initial states
             sim_model.setup['state_init'] = state_init
-            if observer is None:
-                approx_model.set_state_init(state_init)
-            else:
+            if (observer is not None) and current_start > 0.0:
                 approx_model.set_state_init(observer(state_init))
                 self.approx_update_states = np.vstack(
-                    self.approx_update_states, approx_model.setup['state_init'])
+                    (self.approx_update_states, approx_model.setup['state_init']))
+                logging.info("State observed as: %s", approx_model.setup['state_init'])
+                logging.info("Actual state: %s",
+                             np.sum(np.reshape(state_init, (int(ncells), 15)), axis=0) / ncells)
+            else:
+                approx_model.set_state_init(state_init)
 
             approx_model.setup['times'] = current_times
             if stage_len is not None:
                 n_stages = int((current_end - current_start) / stage_len)
 
             if (current_start == 0.0) and use_init_first:
+                logging.info("Using init_policy for first stage.")
                 current_control = init_policy
                 exit_text = "Optimal Solution Found."
             else:
