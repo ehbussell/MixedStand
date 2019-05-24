@@ -75,14 +75,14 @@ class MixedStandApprox:
             'control': np.array([[]]),
             'interp_kind': None
         }
-    
+
     @classmethod
     def load_optimisation_class(cls, filename):
         """Load class from optimisation file."""
 
         with open(filename, "rb") as infile:
             load_obj = pickle.load(infile)
-        
+
         instance = cls(load_obj['setup'], load_obj['params'], load_obj['beta'])
         instance.optimisation = load_obj['optimisation']
 
@@ -94,7 +94,7 @@ class MixedStandApprox:
 
         with open(filename, "rb") as infile:
             load_obj = pickle.load(infile)
-        
+
         instance = cls(load_obj['setup'], load_obj['params'], load_obj['beta'])
         instance.run = load_obj['run']
 
@@ -295,7 +295,8 @@ class MixedStandApprox:
 
         ode = integrate.ode(self.state_deriv)
         ode.set_integrator('lsoda', nsteps=10000, atol=1e-10, rtol=1e-8)
-        ode.set_initial_value(np.append(self.setup['state_init'], [obj_start]), self.setup['times'][0])
+        ode.set_initial_value(
+            np.append(self.setup['state_init'], [obj_start]), self.setup['times'][0])
         ode.set_f_params(control_policy)
 
         logging.debug("Starting ODE run")

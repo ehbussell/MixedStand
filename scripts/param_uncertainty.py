@@ -4,6 +4,7 @@ import argparse
 import logging
 import os
 import numpy as np
+import matplotlib.pyplot as plt
 from scipy.stats import truncnorm
 from scipy.interpolate import interp1d
 from mixed_stand_model import mixed_stand_simulator as ms_sim
@@ -73,20 +74,47 @@ def generate_ensemble_and_fit(setup, params, n_ensemble_runs, standard_dev):
     }
 
     _, beta = scale_and_fit.fit_beta(setup, params, no_bay_dataset=simulation_runs_no_cross_trans,
-                                     with_bay_dataset=simulation_runs)
+                                     with_bay_dataset=simulation_runs, start=baseline_beta)
 
     ret_dict['fit'] = beta
 
     return ret_dict
 
-def run_optimisations(ensemble_and_fit, params, setup, n_optim_runs, standard_dev, mpc_args, ol_pol=None):
+def run_optimisations(ensemble_and_fit, params, setup, n_optim_runs, standard_dev, mpc_args,
+                      ol_pol=None):
     """Run open-loop and MPC optimisations over parameter distributions"""
 
     approx_model = ms_approx.MixedStandApprox(setup, params, ensemble_and_fit['fit'])
     sim_model = ms_sim.MixedStandSimulator(setup, params)
 
     if ol_pol is None:
-        _, ol_control, _ = approx_model.optimise(n_stages=20, init_policy=even_policy)
+        _, ol_control, exit_text = approx_model.optimise(n_stages=20, init_policy=even_policy)
+        if exit_text not in ["Optimal Solution Found.", "Solved To Acceptable Level."]:
+            logging.warning("Failed optimisation. Trying intialisation from previous solution.")
+            filename = os.path.join(os.path.dirname(
+                os.path.realpath(__file__)), "..", "mixed_stand_model", "BOCOP", "problem.def")
+
+            with open(filename, "r") as infile:
+                all_lines = infile.readlines()
+            all_lines[31] = "# " + all_lines[31]
+            all_lines[32] = "# " + all_lines[32]
+            all_lines[33] = all_lines[33][2:]
+            all_lines[34] = all_lines[34][2:]
+            with ms_approx._try_file_open(filename) as outfile:
+                outfile.writelines(all_lines)
+
+            _, ol_control, exit_text = approx_model.optimise(
+                n_stages=20, init_policy=even_policy)
+
+            all_lines[31] = all_lines[31][2:]
+            all_lines[32] = all_lines[32][2:]
+            all_lines[33] = "# " + all_lines[33]
+            all_lines[34] = "# " + all_lines[34]
+            with ms_approx._try_file_open(filename) as outfile:
+                outfile.writelines(all_lines)
+
+            if exit_text not in ["Optimal Solution Found.", "Solved To Acceptable Level."]:
+                raise RuntimeError("Open loop optimisation failed!!")
     else:
         ol_control = ol_pol
 
@@ -110,6 +138,7 @@ def run_optimisations(ensemble_and_fit, params, setup, n_optim_runs, standard_de
 
     ol_objs = np.zeros(n_optim_runs)
     for i in range(n_optim_runs):
+        logging.info("Using parameter set: %s", parameter_samples[i])
         sim_model.params['inf_tanoak_tanoak'] = parameter_samples[i, 0:4]
         sim_model.params['inf_bay_to_tanoak'] = parameter_samples[i, 4]
         sim_model.params['inf_tanoak_to_bay'] = parameter_samples[i, 5]
@@ -125,6 +154,7 @@ def run_optimisations(ensemble_and_fit, params, setup, n_optim_runs, standard_de
     mpc_objs = np.zeros(n_optim_runs)
     mpc_controls = np.zeros((n_optim_runs, 9, len(setup['times']) - 1))
     for i in range(n_optim_runs):
+        logging.info("Using parameter set: %s", parameter_samples[i])
         sim_model.params['inf_tanoak_tanoak'] = parameter_samples[i, 0:4]
         sim_model.params['inf_bay_to_tanoak'] = parameter_samples[i, 4]
         sim_model.params['inf_tanoak_to_bay'] = parameter_samples[i, 5]
@@ -153,7 +183,8 @@ def run_all(n_ens=10, n_opt=10, folder=None, append=False):
     if folder is None:
         folder = os.path.join(os.path.realpath(__file__), '..', '..', 'data', 'param_uncert')
 
-    error_std_devs = np.append(np.linspace(0.0, 0.5, 11), [0.75, 1.0])
+    error_std_devs = np.array([
+        0.0, 0.025, 0.05, 0.075, 0.1, 0.125, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4])
 
     for std_dev in error_std_devs:
         logging.info("Starting analysis with %f standard deviation", std_dev)
@@ -198,7 +229,7 @@ def run_all(n_ens=10, n_opt=10, folder=None, append=False):
                 for key in data.keys():
                     full_optimisations[key] = data[key]
 
-            ol_pol = interp1d(setup['times'][:-1], full_optimisations['ol_control'].T,
+            ol_pol = interp1d(setup['times'][:-1], full_optimisations['ol_control'],
                               kind="zero", fill_value="extrapolate")
 
             optimisations = run_optimisations(
@@ -208,7 +239,8 @@ def run_all(n_ens=10, n_opt=10, folder=None, append=False):
                 full_optimisations[key] = np.append(
                     full_optimisations[key], optimisations[key], axis=0)
 
-            np.savez_compressed(os.path.join(folder, "optimisation_data_" + str(std_dev)), **full_optimisations)
+            np.savez_compressed(
+                os.path.join(folder, "optimisation_data_" + str(std_dev)), **full_optimisations)
 
         else:
             optimisations = run_optimisations(
@@ -219,6 +251,37 @@ def run_all(n_ens=10, n_opt=10, folder=None, append=False):
 
         logging.info("Completed analysis with %f standard deviation", std_dev)
 
+def make_plots(data_folder=None, fig_folder=None):
+    """Create figures"""
+
+    if data_folder is None:
+        data_folder = os.path.join(
+            os.path.realpath(__file__), '..', '..', 'data', 'param_uncert')
+
+    if fig_folder is None:
+        fig_folder = os.path.join(
+            os.path.realpath(__file__), '..', '..', 'figures', 'param_uncert')
+
+    error_std_devs = np.array([
+        0.0, 0.025, 0.05, 0.075, 0.1, 0.125, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4])
+    x_data = []
+    ol_objs = []
+    mpc_objs = []
+
+    for std_dev in error_std_devs:
+        filename = os.path.join(data_folder, "optimisation_data_" + str(std_dev) + ".npz")
+        with np.load(filename) as dat:
+            x_data.extend([std_dev] * len(dat['ol_objs']))
+            ol_objs.extend(dat['ol_objs'])
+            mpc_objs.extend(dat['mpc_objs'])
+
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
+    ax.plot(x_data, ol_objs, '.', label='OL')
+    ax.plot(x_data, mpc_objs, '.', label='MPC')
+    ax.legend()
+
+    fig.savefig(os.path.join(fig_folder, "param_uncert.pdf"), dpi=300, bbox_inches='tight')
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
@@ -232,11 +295,12 @@ if __name__ == "__main__":
                         help="Number of parameter sets to generate for ensemble optimisation")
     parser.add_argument("-a", "--append", action="store_true",
                         help="Flag to append to existing dataset")
+    parser.add_argument("-e", "--existing", action="store_true",
+                        help="Flag to plot existing dataset only")
     args = parser.parse_args()
 
 
-    data_path = os.path.join(
-        os.path.realpath(__file__), '..', '..', 'data', args.folder)
+    data_path = os.path.join(os.path.realpath(__file__), '..', '..', 'data', args.folder)
 
     os.makedirs(data_path, exist_ok=True)
 
@@ -260,6 +324,13 @@ if __name__ == "__main__":
 
     logging.info("Starting script with args: %r", args)
 
-    run_all(n_ens=args.n_ens, n_opt=args.n_opt, folder=data_path, append=args.append)
+    if not args.existing:
+        run_all(n_ens=args.n_ens, n_opt=args.n_opt, folder=data_path, append=args.append)
+    else:
+        fig_path = os.path.join(os.path.realpath(__file__), '..', '..', 'figures', args.folder)
+
+        os.makedirs(fig_path, exist_ok=True)
+
+        make_plots(data_path, fig_path)
 
     logging.info("Script completed")

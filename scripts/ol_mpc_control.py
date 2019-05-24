@@ -167,7 +167,7 @@ def make_plots():
                             alpha=0.75, linestyle='--')
 
     tan_obj = np.array([-(x[1]-x[2][-1]) for x in [nc_sim_run, ol_sim_run, mpc_sim_run]])
-    div_obj = np.array([-(x[2][-1]) for x in [nc_sim_run, ol_sim_run, mpc_sim_run]])
+    div_obj = np.array([-1*(x[2][-1]) for x in [nc_sim_run, ol_sim_run, mpc_sim_run]])
     b1 = ax3.bar(range(3), tan_obj, tick_label=['No control', 'OL', 'MPC'])
     b2 = ax3.bar(range(3), div_obj+tan_obj, bottom=tan_obj, tick_label=['No control', 'OL', 'MPC'])
     ax3.set_ylabel("Objective")
@@ -189,7 +189,7 @@ def make_plots():
         mpc_sim_run, mpc_approx_run = mpc_controller.run_control()
 
         mpc_freqs_tan[i] = -(mpc_sim_run[1] - mpc_sim_run[2][-1])
-        mpc_freqs_div[i] = -(mpc_sim_run[2][-1])
+        mpc_freqs_div[i] = -1*(mpc_sim_run[2][-1])
 
     b1 = ax.bar(mpc_freqs, mpc_freqs_tan)
     b2 = ax.bar(mpc_freqs, mpc_freqs_div+mpc_freqs_tan, bottom=mpc_freqs_tan)
@@ -229,7 +229,7 @@ def make_data():
     for update_period in update_periods:
         mpc_controller.optimise(
             horizon=100, time_step=0.5, end_time=100, update_period=update_period,
-            rolling_horz=False, stage_len=5, init_policy=ol_control_policy)
+            rolling_horz=False, stage_len=5, init_policy=ol_control_policy, use_init_first=True)
         mpc_controller.save_optimisation(
             os.path.join("data", "ol_mpc_control", "mpc_control_{}.pkl").format(update_period))
 
