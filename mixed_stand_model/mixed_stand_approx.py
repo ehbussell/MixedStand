@@ -369,11 +369,12 @@ class MixedStandApprox:
 
         if verbose is True:
             logging.info("Running BOCOP verbosely")
-            old_dir = os.getcwd()
-            os.chdir(bocop_dir)
-            subprocess.call("bocop.exe")
-            os.chdir(old_dir)
-            # subprocess.run([os.path.join(bocop_dir, "bocop.exe")], cwd=bocop_dir, shell=True)
+            # old_dir = os.getcwd()
+            # os.chdir(bocop_dir)
+            # # subprocess.call("bocop.exe")
+            # # os.system("bocop.exe")
+            # os.chdir(old_dir)
+            subprocess.run([os.path.join(bocop_dir, "bocop.exe")], cwd=bocop_dir, shell=True)
         else:
             logging.info("Running BOCOP quietly")
             subprocess.run([os.path.join(bocop_dir, "bocop.exe")],
@@ -491,19 +492,20 @@ class MixedStandApprox:
         all_lines[43] = str(self.params.get('protect_rate', 0.0)) + "\n"
         all_lines[44] = str(self.params.get('treat_eff', 0.0)) + "\n"
         all_lines[45] = str(self.params.get('div_cost', 0.0)) + "\n"
-        all_lines[46] = str(self.params.get('rogue_cost', 0.0)) + "\n"
-        all_lines[47] = str(self.params.get('thin_cost', 0.0)) + "\n"
-        all_lines[48] = str(self.params.get('rel_small_cost', 1.0)) + "\n"
-        all_lines[49] = str(self.params.get('protect_cost', 0.0)) + "\n"
-        all_lines[50] = str(self.params.get('discount_rate', 0.0)) + "\n"
-        all_lines[51] = str(self.params.get('payoff_factor', 0.0)) + "\n"
+        all_lines[46] = str(self.params.get('control_cost', 0.0)) + "\n"
+        all_lines[47] = str(self.params.get('rogue_cost', 0.0)) + "\n"
+        all_lines[48] = str(self.params.get('thin_cost', 0.0)) + "\n"
+        all_lines[49] = str(self.params.get('rel_small_cost', 1.0)) + "\n"
+        all_lines[50] = str(self.params.get('protect_cost', 0.0)) + "\n"
+        all_lines[51] = str(self.params.get('discount_rate', 0.0)) + "\n"
+        all_lines[52] = str(self.params.get('payoff_factor', 0.0)) + "\n"
 
         if n_stages is None:
-            all_lines[52] = "0\n"
+            all_lines[53] = "0\n"
         else:
-            all_lines[52] = str(n_stages) + "\n"
+            all_lines[53] = str(n_stages) + "\n"
 
-        all_lines[53] = str(self.params.get('vaccine_decay', 0.0)) + "\n"
+        all_lines[54] = str(self.params.get('vaccine_decay', 0.0)) + "\n"
 
         with _try_file_open(os.path.join(folder, "problem.constants")) as outfile:
             outfile.writelines(all_lines)

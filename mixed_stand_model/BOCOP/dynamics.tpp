@@ -53,8 +53,13 @@
 	double protect_rate = constants[38];
 	double treat_eff = constants[39];
 	double div_cost = constants[40];
-	double discount_rate = constants[45];
-	double vaccine_decay = constants[48];
+	double control_cost = constants[41];
+	double rogue_cost = constants[42];
+	double thin_cost = constants[43];
+	double rel_small_cost = constants[44];
+	double protect_cost = constants[45];
+	double discount_rate = constants[46];
+	double vaccine_decay = constants[49];
 
 	Tdouble inf_rate = 0.0;
 	Tdouble empty_space = 1.0 - space[4] * (state[12] + state[13]) - space[5] * state[14];
@@ -70,12 +75,30 @@
 	// Find total number of hosts
 	Tdouble nhosts = tanoak + bay + red;
 
-	Tdouble diversity_costs = log(
+	Tdouble diversity_costs = -exp(-log(
 		pow(tanoak / nhosts, tanoak / nhosts) * pow(bay / nhosts, bay / nhosts) *
-		pow(red / nhosts, red / nhosts));
+		pow(red / nhosts, red / nhosts)));
+	
+	// Tdouble control_costs = 
+	// 	(control[0] * rel_small_cost * rogue_rate * rogue_cost * (state[1] + state[4])) +
+	// 	(control[1] * (state[7] + state[10]) + control[2] * (state[13])) * rogue_rate * rogue_cost +
+	// 	(control[3] * rel_small_cost  * thin_rate * thin_cost * (
+	// 		state[0] + state[1] + state[2] + state[3] + state[4] + state[5])) +
+	// 	(control[4] * (state[6] + state[7] + state[8] + state[9] + state[10] + state[11]) +
+	// 		control[5] * (state[12] + state[13]) + control[6] * state[14]) * thin_rate * thin_cost +
+	// 	(control[7] * (state[0] + state[1] + state[2] + state[3] + state[4] + state[5]) +
+	// 		control[8] * (state[6] + state[7] + state[8] + state[9] + state[10] + state[11])) *
+	// 		protect_rate * protect_cost;
+
+	Tdouble control_costs = (control[0] * rel_small_cost * rogue_rate * rogue_cost) +
+		(control[1] + control[2]) * rogue_rate * rogue_cost +
+		(control[3] * rel_small_cost  * thin_rate * thin_cost) +
+		(control[4] + control[5] + control[6]) * thin_rate * thin_cost +
+		(control[7] + control[8]) * protect_rate * protect_cost;
 	
 	// Objective function
-	state_dynamics[15] = exp(- discount_rate * time) * (div_cost * diversity_costs);
+	state_dynamics[15] = exp(- discount_rate * time) * 
+		(div_cost * diversity_costs + control_cost * control_costs);
 
 	// Dynamics
 	// Initialise to zero

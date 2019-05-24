@@ -3,20 +3,20 @@
 
 # Initial and final time :
 time.free string none
-time.initial double 80.0
+time.initial double 20.0
 time.final double 100.0
 
 # Dimensions :
 state.dimension integer 16
 control.dimension integer 9
 algebraic.dimension integer 0
-parameter.dimension integer 36
-constant.dimension integer 49
+parameter.dimension integer 144
+constant.dimension integer 50
 boundarycond.dimension integer 16
 constraint.dimension integer 10
 
 # Discretization :
-discretization.steps integer 40
+discretization.steps integer 160
 discretization.method string gauss
 
 # Optimization :
@@ -29,10 +29,10 @@ batch.upperbound double 0
 batch.directory string none
 
 # Initialization :
-initialization.type string from_init_file
-initialization.file string none
-# initialization.type string from_sol_file_cold
-# initialization.file string problem.sol
+# initialization.type string from_init_file
+# initialization.file string none
+initialization.type string from_sol_file_cold
+initialization.file string problem.sol
 
 # Parameter identification :
 paramid.type string false
@@ -124,18 +124,18 @@ constant.37 string thin_rate
 constant.38 string protect_rate
 constant.39 string treat_eff
 constant.40 string div_cost
-constant.41 string rogue_cost
-constant.42 string thin_cost
-constant.43 string rel_small_cost
-constant.44 string protect_cost
-constant.45 string discount_rate
-constant.46 string payoff_factor
-constant.47 string n_stages
-constant.48 string vaccine_decay
+constant.41 string control_cost
+constant.42 string rogue_cost
+constant.43 string thin_cost
+constant.44 string rel_small_cost
+constant.45 string protect_cost
+constant.46 string discount_rate
+constant.47 string payoff_factor
+constant.48 string n_stages
+constant.49 string vaccine_decay
 
 # Solution file :
 solution.file string problem.sol
 
 # Iteration output frequency :
 iteration.output.frequency integer 0
-

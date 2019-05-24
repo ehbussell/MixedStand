@@ -34,12 +34,12 @@
 	double thin_rate = constants[37];
 	double protect_rate = constants[38];
 
-	double rogue_cost = constants[41];
-	double thin_cost = constants[42];
-	double rel_small_cost = constants[43];
-	double protect_cost = constants[44];
+	double rogue_cost = constants[42];
+	double thin_cost = constants[43];
+	double rel_small_cost = constants[44];
+	double protect_cost = constants[45];
 
-	int n_stages = constants[47];
+	int n_stages = constants[48];
 
 	// Total control expenditure <= budget
 	path_constraints[0] = (control[0] * rel_small_cost * rogue_rate * rogue_cost) +

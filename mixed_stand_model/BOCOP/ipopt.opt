@@ -1,4 +1,4 @@
-max_iter 500
+max_iter 300
 print_level 5
 acceptable_tol 1.0e-6
 tol 1.0e-8
