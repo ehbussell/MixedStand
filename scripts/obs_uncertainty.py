@@ -54,8 +54,7 @@ def make_data(n_reps=10, folder=None, append=False):
     # This simulation is over 20 ha.
 
     pop_size = np.product(setup['landscape_dims']) * 561 * 20 / np.sum(setup['state_init'])
-    # sampling_nums = list(map(int, pop_size * np.geomspace(0.1, 1.0, 6)))[:-1]
-    sampling_nums = list(map(int, pop_size * np.power(10, [-1.6, -1.8, -2.0])))
+    sampling_nums = list(map(int, pop_size * np.array([0.05, 0.1, 0.25, 0.5, 0.75])))
 
     with open(os.path.join("data", "scale_and_fit_results.json"), "r") as infile:
         scale_and_fit_results = json.load(infile)
@@ -127,7 +126,7 @@ def make_plots(data_folder=None, fig_folder=None):
     setup, params = utils.get_setup_params(
         parameters.CORRECTED_PARAMS, scale_inf=True, host_props=parameters.COBB_PROP_FIG4A)
 
-    sampling_effort = np.power(10, np.arange(-2, 0.2, 0.2))
+    sampling_effort = np.array([0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 1.0])
     pop_size = np.product(setup['landscape_dims']) * 561 * 20 / np.sum(setup['state_init'])
     sampling_nums = list(map(int, pop_size * sampling_effort))[:-1]
 
@@ -168,10 +167,9 @@ def make_plots(data_folder=None, fig_folder=None):
 
     ax.set_xlabel("Sampling effort")
     ax.set_ylabel("Objective")
-    ax.set_xscale('log')
 
     ax.legend()
-    fig.savefig(os.path.join(fig_folder, "obs_uncert.pdf"), dpi=600, bbox_inches='tight')
+    fig.savefig(os.path.join(fig_folder, "param_uncert.pdf"), dpi=600, bbox_inches='tight')
 
 
 if __name__ == "__main__":
