@@ -41,12 +41,16 @@
 
 	int n_stages = constants[48];
 
+	Tdouble small_tan = state[0] + state[1] + state[2] + state[3] + state[4] + state[5];
+	Tdouble large_tan = state[6] + state[7] + state[8] + state[9] + state[10] + state[11];
+
 	// Total control expenditure <= budget
-	path_constraints[0] = (control[0] * rel_small_cost * rogue_rate * rogue_cost) +
-		(control[1] + control[2]) * rogue_rate * rogue_cost +
-		(control[3] * rel_small_cost  * thin_rate * thin_cost) +
-		(control[4] + control[5] + control[6]) * thin_rate * thin_cost +
-		(control[7] + control[8]) * protect_rate * protect_cost;
+	path_constraints[0] = 
+		control[0] * rel_small_cost * rogue_rate * rogue_cost * (state[1] + state[4]) +
+		(control[1] * (state[7] + state[10]) + control[2] * state[13]) * rogue_rate * rogue_cost +
+		control[3] * rel_small_cost  * thin_rate * thin_cost * small_tan +
+		(control[4] * large_tan + control[5] * (state[12] + state[13]) + control[6] * state[14]) * thin_rate * thin_cost +
+		(control[7] * (state[0] + state[3]) + control[8] * (state[6] + state[9])) * protect_rate * protect_cost;
 
 	if (dim_path_constraints > 1){
 		path_constraints[1] = control[0] - parametrizedcontrol(

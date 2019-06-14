@@ -75,9 +75,9 @@
 	// Find total number of hosts
 	Tdouble nhosts = tanoak + bay + red;
 
-	Tdouble diversity_costs = -exp(-log(
+	Tdouble diversity_costs = log(
 		pow(tanoak / nhosts, tanoak / nhosts) * pow(bay / nhosts, bay / nhosts) *
-		pow(red / nhosts, red / nhosts)));
+		pow(red / nhosts, red / nhosts));
 	
 	// Tdouble control_costs = 
 	// 	(control[0] * rel_small_cost * rogue_rate * rogue_cost * (state[1] + state[4])) +
