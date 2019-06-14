@@ -358,6 +358,13 @@ class TestControlRates(unittest.TestCase):
 
         params = copy.deepcopy(ZERO_PARAMS)
         params['rogue_rate'] = np.random.rand()
+        params['rel_small_cost'] = 1.0
+        params['rogue_cost'] = 0.0
+        params['thin_cost'] = 0.0
+        params['protect_cost'] = 0.0
+        params['thin_rate'] = 0.0
+        params['protect_rate'] = 0.0
+        params['max_budget'] = 100
 
         self.model.params = params
         self.model._initialise()
@@ -387,6 +394,13 @@ class TestControlRates(unittest.TestCase):
 
         params = copy.deepcopy(ZERO_PARAMS)
         params['thin_rate'] = np.random.rand()
+        params['rel_small_cost'] = 1.0
+        params['rogue_cost'] = 0.0
+        params['thin_cost'] = 0.0
+        params['protect_cost'] = 0.0
+        params['rogue_rate'] = 0.0
+        params['protect_rate'] = 0.0
+        params['max_budget'] = 100
 
         self.model.params = params
         self.model._initialise()
@@ -418,6 +432,13 @@ class TestControlRates(unittest.TestCase):
 
         params = copy.deepcopy(ZERO_PARAMS)
         params['protect_rate'] = np.random.rand()
+        params['rel_small_cost'] = 1.0
+        params['rogue_cost'] = 0.0
+        params['thin_cost'] = 0.0
+        params['protect_cost'] = 0.0
+        params['thin_rate'] = 0.0
+        params['rogue_rate'] = 0.0
+        params['max_budget'] = 100
 
         self.model.params = params
         self.model._initialise()

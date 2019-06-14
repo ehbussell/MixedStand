@@ -59,7 +59,7 @@ class TestObjCalculation(unittest.TestCase):
         expected_integrand = np.exp(-params['discount_rate']*time) * (
             params['div_cost'] * np.sum(state_props * np.log(state_props)))
 
-        self.assertEqual(integrand, expected_integrand)
+        self.assertAlmostEqual(integrand, expected_integrand)
 
         # Now test with multiple cells
         ncells = 100
@@ -76,4 +76,4 @@ class TestObjCalculation(unittest.TestCase):
         expected_integrand = np.exp(-params['discount_rate']*time) * (
             params['div_cost'] * np.sum(state_props * np.log(state_props)))
 
-        self.assertEqual(integrand, expected_integrand)
+        self.assertAlmostEqual(integrand, expected_integrand)

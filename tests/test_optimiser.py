@@ -40,6 +40,7 @@ class TestOptimiser(unittest.TestCase):
         self.params['payoff_factor'] = 1.0
         self.params['treat_eff'] = 0.75
         self.params['max_budget'] = 100
+        self.params['rel_small_cost'] = 0.5
 
         self.approx_model = ms_approx.MixedStandApprox(setup, self.params, beta)
 
