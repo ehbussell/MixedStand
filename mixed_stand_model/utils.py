@@ -7,6 +7,7 @@ import logging
 import os
 import numpy as np
 from . import parameters
+from . import mixed_stand_simulator as ms_sim
 
 class Species(IntEnum):
     """Host species."""
@@ -33,6 +34,16 @@ def objective_integrand(time, state, control, params):
         div_costs += div_factor * np.sum(
             props * np.log(props, out=np.zeros_like(props), where=(props > 0.0)))
 
+    if control_factor != 0.0:
+        control[0:4] *= params['thin_cost']
+        control[4:7] *= params['rogue_cost']
+        control[7:] *= params['protect_cost']
+
+        control[[0, 4]] *= params['rel_small_cost']
+
+        control_costs += control_factor * np.sum(control)
+
+
     div_costs *= np.exp(- params.get('discount_rate', 0.0) * time)
 
     return div_costs
@@ -47,6 +58,30 @@ def objective_payoff(end_time, state, params):
             state[6] + state[8] + state[9] + state[11])
 
     return payoff
+
+def control_expenditure(control, params, state):
+    """Calculate expenditure of control allocation."""
+
+    allocation = np.array([
+        state[1] + state[4],
+        state[7] + state[10],
+        state[13],
+        np.sum(state[0:6], axis=0),
+        np.sum(state[6:12], axis=0),
+        state[12] + state[13],
+        state[14],
+        state[0] + state[3],
+        state[6] + state[9]]) * control
+
+    expenditure = (
+        allocation[0] * params['rel_small_cost'] * params['rogue_rate'] * params['rogue_cost'] +
+        (allocation[1] + allocation[2]) * params['rogue_rate'] * params['rogue_cost'] +
+		allocation[3] * params['rel_small_cost']  * params['thin_rate'] * params['thin_cost'] +
+		(allocation[4] + allocation[5] + allocation[6]) * params['thin_rate'] * params['thin_cost'] +
+		(allocation[7] + allocation[8]) * params['protect_rate'] * params['protect_cost']
+    )
+
+    return expenditure
 
 def get_setup_params(base_params=None, scale_inf=True, state_init=None, host_props=None, inf=True):
     """Construct setup and parameters"""
@@ -89,6 +124,12 @@ def get_setup_params(base_params=None, scale_inf=True, state_init=None, host_pro
         'times': np.linspace(0, 100.0, 201)
     }
 
+    setup['times'] = np.linspace(0, 6, 13)
+    model = ms_sim.MixedStandSimulator(setup, params)
+    init_run, *_ = model.run_policy(control_policy=None, n_fixed_steps=None)
+    setup['times'] = np.linspace(0, 100, 201)
+    setup['state_init'] = init_run[:, -1]
+
     logging.info("Using landscape dimensions (%d, %d)", *setup['landscape_dims'])
     if inf:
         logging.info("Using initial infection in cells %s", init_inf_cells)
@@ -99,15 +140,15 @@ def get_setup_params(base_params=None, scale_inf=True, state_init=None, host_pro
     params['treat_eff'] = 0.75
     params['vaccine_decay'] = 0.5
 
-    params['rogue_rate'] = 0.5
-    params['thin_rate'] = 0.5
+    params['rogue_rate'] = 0.25
+    params['thin_rate'] = 1.0
     params['protect_rate'] = 0.25
 
-    params['rogue_cost'] = 1000
-    params['thin_cost'] = 1000
+    params['rogue_cost'] = 6000
+    params['thin_cost'] = 500
     params['rel_small_cost'] = 0.5
     params['protect_cost'] = 200
-    params['max_budget'] = 600
+    params['max_budget'] = 16
 
     params['discount_rate'] = 0.0
     params['payoff_factor'] = 1.0 / np.sum(state_init[6:12])

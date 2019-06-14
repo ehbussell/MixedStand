@@ -245,6 +245,11 @@ class MixedStandApprox:
         if control_func is not None:
             control = control_func(time)
 
+            expense = utils.control_expenditure(control, self.params, state)
+
+            if expense > self.params['max_budget']:
+                control *= self.params['max_budget'] / expense
+
             control[0:3] *= self.params.get('rogue_rate', 0.0)
             control[3:7] *= self.params.get('thin_rate', 0.0)
             control[7:] *= self.params.get('protect_rate', 0.0)
@@ -348,7 +353,7 @@ class MixedStandApprox:
 
         return state, self.run['objective'], obj
 
-    def optimise(self, bocop_dir=None, verbose=True, init_policy=None, n_stages=None):
+    def optimise(self, bocop_dir=None, verbose=True, init_policy=None, n_stages=None, obj_start=0.0):
         """Run BOCOP optimisation of control.
 
         If n_stages is not None, then control will be piecewise constant with this number of stages
@@ -359,36 +364,17 @@ class MixedStandApprox:
 
         logging.info("Running initial policy")
         if init_policy is None:
-            init_state, _, init_obj = self.run_policy(None)
+            init_state, _, init_obj = self.run_policy(None, obj_start=obj_start)
         else:
-            init_state, _, init_obj = self.run_policy(init_policy, n_fixed_steps=None)
+            init_state, _, init_obj = self.run_policy(init_policy, n_fixed_steps=None,
+                                                      obj_start=obj_start)
 
         init = np.vstack((init_state, init_obj))
 
         self._set_bocop_params(init_state=init, init_policy=init_policy,
-                               folder=bocop_dir, n_stages=n_stages)
+                               folder=bocop_dir, n_stages=n_stages, obj_start=obj_start)
 
-        if verbose is True:
-            logging.info("Running BOCOP verbosely")
-            # old_dir = os.getcwd()
-            # os.chdir(bocop_dir)
-            # # subprocess.call("bocop.exe")
-            # # os.system("bocop.exe")
-            # os.chdir(old_dir)
-            subprocess.run([os.path.join(bocop_dir, "bocop.exe")], cwd=bocop_dir, shell=True)
-        else:
-            logging.info("Running BOCOP quietly")
-            subprocess.run([os.path.join(bocop_dir, "bocop.exe")],
-                           cwd=bocop_dir, stdout=subprocess.DEVNULL,
-                           stderr=subprocess.DEVNULL)
-
-        state_t, _, control_t, exit_text = bocop_utils.readSolFile(
-            os.path.join(bocop_dir, "problem.sol"), ignore_fail=True)
-
-        if exit_text == "Optimal Solution Found." or exit_text == "Solved To Acceptable Level.":
-            logging.info("BOCOP optimisation completed with exit code: %s", exit_text)
-        else:
-            logging.error("BOCOP optimisation failed with exit code: %s", exit_text)
+        state_t, control_t, exit_text = run_bocop_exe(bocop_dir, verbose)
 
         actual_states = np.array([state_t(t) for t in self.setup['times']]).T
 
@@ -407,7 +393,7 @@ class MixedStandApprox:
 
         return (actual_states, control_t, exit_text)
 
-    def _set_bocop_params(self, init_state, init_policy=None, folder="BOCOP", n_stages=None):
+    def _set_bocop_params(self, init_state, init_policy=None, folder="BOCOP", n_stages=None, obj_start=0.0):
         """Save parameters and initial conditions to file for BOCOP optimisation."""
 
         logging.info("Setting BOCOP parameters")
@@ -421,6 +407,8 @@ class MixedStandApprox:
         for i in range(15):
             all_lines[9+i] = str(self.setup['state_init'][i]) + " " + str(
                 self.setup['state_init'][i]) + " equal\n"
+
+        all_lines[24] = str(obj_start) + " " + str(obj_start) + " equal\n"
 
         # When no integrated term in objective, set bounds on integrand to zero to aid convergence
         if self.params.get('div_cost', 0.0) == 0.0:
@@ -599,3 +587,44 @@ def _try_file_open(filename):
             logging.warning("Permission error opening %s. Trying again...", filename)
             continue
         break
+
+def run_bocop_exe(bocop_dir, verbose=True):
+    """Run BOCOP executable, attempting re-run if Ipopt error."""
+
+    if verbose is True:
+        logging.info("Running BOCOP verbosely")
+        subprocess.run([os.path.join(bocop_dir, "bocop.exe")], cwd=bocop_dir, shell=True)
+    else:
+        logging.info("Running BOCOP quietly")
+        subprocess.run([os.path.join(bocop_dir, "bocop.exe")],
+                       cwd=bocop_dir, stdout=subprocess.DEVNULL,
+                       stderr=subprocess.DEVNULL)
+
+    state_t, _, control_t, exit_text = bocop_utils.readSolFile(
+        os.path.join(bocop_dir, "problem.sol"), ignore_fail=True)
+
+    if exit_text in ("Optimal Solution Found.", "Solved To Acceptable Level."):
+        logging.info("BOCOP optimisation completed with exit code: %s", exit_text)
+    else:
+        logging.error("BOCOP optimisation failed with exit code: %s", exit_text)
+
+    if exit_text == "Some uncaught Ipopt exception encountered.":
+        logging.info("Trying to rerun optimiser.")
+        if verbose is True:
+            logging.info("Running BOCOP verbosely")
+            subprocess.run([os.path.join(bocop_dir, "bocop.exe")], cwd=bocop_dir, shell=True)
+        else:
+            logging.info("Running BOCOP quietly")
+            subprocess.run([os.path.join(bocop_dir, "bocop.exe")],
+                            cwd=bocop_dir, stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL)
+
+        state_t, _, control_t, exit_text = bocop_utils.readSolFile(
+            os.path.join(bocop_dir, "problem.sol"), ignore_fail=True)
+
+        if exit_text in ("Optimal Solution Found.", "Solved To Acceptable Level."):
+            logging.info("BOCOP optimisation completed with exit code: %s", exit_text)
+        else:
+            logging.error("BOCOP optimisation failed with exit code: %s", exit_text)
+    
+    return (state_t, control_t, exit_text)

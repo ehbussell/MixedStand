@@ -68,7 +68,7 @@ class MixedStandSimulator:
 
         with open(filename, "rb") as infile:
             load_obj = pickle.load(infile)
-        
+
         instance = cls(load_obj['setup'], load_obj['params'])
         instance.run = load_obj['run']
 
@@ -347,7 +347,7 @@ class MixedStandSimulator:
                         self.params['spore_within'] * self.params['inf_tanoak_to_bay'])
                 B[5*loc1+4, 5*loc1+4] += (
                     self.params['spore_within'] * self.params['inf_bay_to_bay'])
-                
+
                 # Between cell dynamics
                 for loc2 in range(self.ncells):
                     loc2_coords = np.unravel_index(loc2, self.setup['landscape_dims'])
@@ -356,7 +356,7 @@ class MixedStandSimulator:
                         np.power(loc1_coords[1]-loc2_coords[1], 2))
                     if (dist == 0.0) or (dist > kernel_range):
                         continue
-                    
+
                     kernel_val = norm_factor * np.exp(-dist / self.params['kernel_scale'])
 
                     # Infection of tanoak:
@@ -372,7 +372,7 @@ class MixedStandSimulator:
                         B[5*loc1+4, 5*loc2+age_class2] += (
                             kernel_val * self.params['inf_tanoak_to_bay'])
                     B[5*loc1+4, 5*loc2+4] += (kernel_val * self.params['inf_bay_to_bay'])
-        
+
         else:
             raise ValueError("Unrecognised kernel type!")
 
@@ -450,6 +450,12 @@ class MixedStandSimulator:
 
         if control_func is not None:
             control = control_func(time)
+            averaged_state = np.sum(np.reshape(state, (self.ncells, 15)), axis=0) / self.ncells
+
+            expense = utils.control_expenditure(control, self.params, averaged_state)
+
+            if expense > self.params['max_budget']:
+                control *= self.params['max_budget'] / expense
 
             control[0:3] *= self.params.get('rogue_rate', 0.0)
             control[3:7] *= self.params.get('thin_rate', 0.0)

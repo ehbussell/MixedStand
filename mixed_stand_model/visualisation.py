@@ -4,7 +4,11 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib import animation
 from scipy.interpolate import interp1d
+from . import utils
 
+
+CONTROL_COLOURS = ['#637939', '#b5cf6b', '#74c476', '#c7e9c0', '#e6550d', '#fd8d3c', '#fdae6b',
+                   '#756bb1', '#bcbddc']
 
 def plot_hosts(times, model_run, ax=None, combine_ages=True, proportions=True, **kwargs):
     """Plot host proportions.
@@ -44,7 +48,7 @@ def plot_hosts(times, model_run, ax=None, combine_ages=True, proportions=True, *
 
     if 'labels' in kwargs:
         names = kwargs.pop('labels')
-    
+
     lines = []
 
     for state, colour, name in zip(states, colours, names):
@@ -90,7 +94,7 @@ def plot_dpcs(times, model_run, ax=None, combine_ages=True, proportions=True, **
 
     if 'labels' in kwargs:
         names = kwargs.pop('labels')
-    
+
     lines = []
 
     for state, colour, name in zip(states, colours, names):
@@ -99,7 +103,7 @@ def plot_dpcs(times, model_run, ax=None, combine_ages=True, proportions=True, **
 
     return ax, lines
 
-def plot_control(times, control_policy, params, ax=None, labels=None, colors=None, **kwargs):
+def plot_control(times, control, state, params, ax=None, labels=None, colors=None, **kwargs):
     """Plot given control strategy."""
 
     if ax is None:
@@ -116,19 +120,31 @@ def plot_control(times, control_policy, params, ax=None, labels=None, colors=Non
         ]
 
     if colors is None:
-        cmap = plt.get_cmap("tab20c")
-        colors = ([cmap(0.025 + x*0.05) for x in [8, 9, 10, 11]] +
-                  [cmap(0.025 + x*0.05) for x in [4, 5, 6]] +
-                  [cmap(0.025 + x*0.05) for x in [12, 14]])
-    all_controls = np.array([control_policy(t)[order] for t in times]).T
+        colors = CONTROL_COLOURS
 
-    all_controls[0:4] *= params['thin_rate'] * params['thin_cost']
-    all_controls[4:7] *= params['rogue_rate'] * params['rogue_cost']
-    all_controls[7:] *= params['protect_rate'] * params['protect_cost']
+    allocation = (np.array([
+        state[1] + state[4],
+        state[7] + state[10],
+        state[13],
+        np.sum(state[0:6], axis=0),
+        np.sum(state[6:12], axis=0),
+        state[12] + state[13],
+        state[14],
+        state[0] + state[3],
+        state[6] + state[9]]) * control)
 
-    all_controls[[0, 4]] *= params['rel_small_cost']
+    allocation[0:3] *= params['rogue_rate'] * params['rogue_cost']
+    allocation[3:7] *= params['thin_rate'] * params['thin_cost']
+    allocation[7:] *= params['protect_rate'] * params['protect_cost']
+    allocation[0] *= params['rel_small_cost']
+    allocation[3] *= params['rel_small_cost']
 
-    ax.stackplot(times, *all_controls, labels=labels, colors=colors, step='post', **kwargs)
+    expense = utils.control_expenditure(control, params, state)
+    for j in range(len(times)-1):
+        if expense[j] > params['max_budget']:
+            allocation[:, j] *= params['max_budget'] / expense[j]
+
+    ax.stackplot(times, *allocation[order], labels=labels, colors=colors, step='post', **kwargs)
 
     for _, side in ax.spines.items():
         side.set_linewidth(0.1)
