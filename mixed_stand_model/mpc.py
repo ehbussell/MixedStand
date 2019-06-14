@@ -19,12 +19,13 @@ if __name__ == "__main__":
 class Controller:
     """MPC Controller"""
 
-    def __init__(self, setup, params, beta):
+    def __init__(self, setup, params, beta, approx_params=None):
         """Model predictive controller, regular optimisations on approx model control simulator."""
 
         self.setup = copy.deepcopy(setup)
         self.params = copy.deepcopy(params)
         self.beta = copy.deepcopy(beta)
+        self.approx_params = copy.deepcopy(approx_params)
 
         self.times = np.array([])
         self.control = np.array([[]])
@@ -60,7 +61,10 @@ class Controller:
             'init_policy': init_policy
         }
 
-        approx_model = ms_approx.MixedStandApprox(self.setup, self.params, self.beta)
+        if self.approx_params is None:
+            approx_model = ms_approx.MixedStandApprox(self.setup, self.params, self.beta)
+        else:
+            approx_model = ms_approx.MixedStandApprox(self.setup, self.approx_params, self.beta)
 
         sim_model = ms_sim.MixedStandSimulator(self.setup, self.params)
 
@@ -125,38 +129,38 @@ class Controller:
             if (current_start == 0.0) and use_init_first:
                 logging.info("Using init_policy for first stage.")
                 current_control = init_policy
-                exit_text = "Optimal Solution Found."
             else:
                 _, current_control, exit_text = approx_model.optimise(
-                    n_stages=n_stages, init_policy=init_policy)
-
-            if exit_text not in ["Optimal Solution Found.", "Solved To Acceptable Level."]:
-                logging.warning("Failed optimisation. Trying intialisation from previous solution.")
-                filename = os.path.join(
-                    os.path.dirname(os.path.realpath(__file__)), "BOCOP", "problem.def")
-
-                with open(filename, "r") as infile:
-                    all_lines = infile.readlines()
-                all_lines[31] = "# " + all_lines[31]
-                all_lines[32] = "# " + all_lines[32]
-                all_lines[33] = all_lines[33][2:]
-                all_lines[34] = all_lines[34][2:]
-                with ms_approx._try_file_open(filename) as outfile:
-                    outfile.writelines(all_lines)
-
-                _, current_control, exit_text = approx_model.optimise(
-                    n_stages=n_stages, init_policy=init_policy)
-
-                all_lines[31] = all_lines[31][2:]
-                all_lines[32] = all_lines[32][2:]
-                all_lines[33] = "# " + all_lines[33]
-                all_lines[34] = "# " + all_lines[34]
-                with ms_approx._try_file_open(filename) as outfile:
-                    outfile.writelines(all_lines)
+                    n_stages=n_stages, init_policy=init_policy, obj_start=sim_obj[-1])
 
                 if exit_text not in ["Optimal Solution Found.", "Solved To Acceptable Level."]:
-                    logging.error("Failed optimisation. Falling back to init policy.")
-                    current_control = init_policy
+                    logging.warning(
+                        "Failed optimisation. Trying intialisation from previous solution.")
+                    filename = os.path.join(
+                        os.path.dirname(os.path.realpath(__file__)), "BOCOP", "problem.def")
+
+                    with open(filename, "r") as infile:
+                        all_lines = infile.readlines()
+                    all_lines[31] = "# " + all_lines[31]
+                    all_lines[32] = "# " + all_lines[32]
+                    all_lines[33] = all_lines[33][2:]
+                    all_lines[34] = all_lines[34][2:]
+                    with ms_approx._try_file_open(filename) as outfile:
+                        outfile.writelines(all_lines)
+
+                    _, current_control, exit_text = approx_model.optimise(
+                        n_stages=n_stages, init_policy=init_policy)
+
+                    all_lines[31] = all_lines[31][2:]
+                    all_lines[32] = all_lines[32][2:]
+                    all_lines[33] = "# " + all_lines[33]
+                    all_lines[34] = "# " + all_lines[34]
+                    with ms_approx._try_file_open(filename) as outfile:
+                        outfile.writelines(all_lines)
+
+                    if exit_text not in ["Optimal Solution Found.", "Solved To Acceptable Level."]:
+                        logging.error("Failed optimisation. Falling back to init policy.")
+                        current_control = init_policy
 
             simulation_times = np.arange(
                 current_start, np.minimum(next_update, end_time)+time_step, step=time_step)
@@ -191,7 +195,11 @@ class Controller:
         run_policy function.
         """
 
-        approx_model = ms_approx.MixedStandApprox(self.setup, self.params, self.beta)
+        if self.approx_params is None:
+            approx_model = ms_approx.MixedStandApprox(self.setup, self.params, self.beta)
+        else:
+            approx_model = ms_approx.MixedStandApprox(self.setup, self.approx_params, self.beta)
+
         sim_model = ms_sim.MixedStandSimulator(self.setup, self.params)
 
         if self.config['stage_len'] is None:
@@ -243,7 +251,7 @@ class Controller:
     def save_optimisation(self, filename):
         """Save control optimisation to file."""
 
-        logging.info("Saving optiimisation to file: %s", filename)
+        logging.info("Saving optimisation to file: %s", filename)
 
         dump_obj = {
             'times': self.times,
@@ -251,7 +259,8 @@ class Controller:
             'config': self.config,
             'setup': self.setup,
             'params': self.params,
-            'beta': self.beta
+            'beta': self.beta,
+            'approx_params': self.approx_params
         }
 
         with open(filename, "wb") as outfile:
@@ -266,7 +275,8 @@ class Controller:
         with open(filename, "rb") as infile:
             load_obj = pickle.load(infile)
 
-        instance = cls(load_obj['setup'], load_obj['params'], load_obj['beta'])
+        instance = cls(
+            load_obj['setup'], load_obj['params'], load_obj['beta'], load_obj['approx_params'])
 
         instance.times = load_obj['times']
         instance.control = load_obj['control']
