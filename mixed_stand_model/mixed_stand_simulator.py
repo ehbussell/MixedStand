@@ -13,8 +13,7 @@ import pickle
 import numpy as np
 from scipy import integrate
 
-from . import utils
-from .utils import Species
+from mixed_stand_model import utils
 
 
 class MixedStandSimulator:
@@ -149,11 +148,11 @@ class MixedStandSimulator:
     def _get_state_idx(self, species, age_class, location):
         """Get index for particular host in state array."""
 
-        if species == Species.TANOAK:
+        if species == utils.Species.TANOAK:
             index = 3*age_class
-        elif species == Species.BAY:
+        elif species == utils.Species.BAY:
             index = 12
-        elif species == Species.REDWOOD:
+        elif species == utils.Species.REDWOOD:
             index = 14
         else:
             raise ValueError("Unrecognised species!")
@@ -168,16 +167,16 @@ class MixedStandSimulator:
         A = np.zeros((15, 15))
 
         # Resprouting
-        i = self._get_state_idx(Species.TANOAK, 0, 0)
+        i = self._get_state_idx(utils.Species.TANOAK, 0, 0)
         for age_class in range(4):
-            j = self._get_state_idx(Species.TANOAK, age_class, 0) + 1
+            j = self._get_state_idx(utils.Species.TANOAK, age_class, 0) + 1
             A[i, j] += self.params['resprout_tanoak'] * self.params['inf_mort_tanoak'][age_class]
 
         # Mortality and recovery (tanoak)
         for age_class in range(4):
-            i = self._get_state_idx(Species.TANOAK, age_class, 0)
-            j = self._get_state_idx(Species.TANOAK, age_class, 0) + 1
-            k = self._get_state_idx(Species.TANOAK, age_class, 0) + 2
+            i = self._get_state_idx(utils.Species.TANOAK, age_class, 0)
+            j = self._get_state_idx(utils.Species.TANOAK, age_class, 0) + 1
+            k = self._get_state_idx(utils.Species.TANOAK, age_class, 0) + 2
             A[i, i] += -self.params['nat_mort_tanoak'][age_class]
             A[j, j] += (-self.params['nat_mort_tanoak'][age_class]
                         -self.params['inf_mort_tanoak'][age_class]
@@ -186,20 +185,20 @@ class MixedStandSimulator:
             A[k, k] += -self.params['nat_mort_tanoak'][age_class]
 
         # Mortality and recovery (bay)
-        i = self._get_state_idx(Species.BAY, 0, 0)
-        j = self._get_state_idx(Species.BAY, 0, 0) + 1
+        i = self._get_state_idx(utils.Species.BAY, 0, 0)
+        j = self._get_state_idx(utils.Species.BAY, 0, 0) + 1
         A[i, i] += -self.params['nat_mort_bay']
         A[j, j] += (-self.params['nat_mort_bay'] - self.params['recov_bay'])
         A[i, j] += self.params['recov_bay']
 
         # Mortality and recovery (redwood)
-        i = self._get_state_idx(Species.REDWOOD, 0, 0)
+        i = self._get_state_idx(utils.Species.REDWOOD, 0, 0)
         A[i, i] += -self.params['nat_mort_redwood']
 
         # Age transitions
         for age_class in range(3):
-            i = self._get_state_idx(Species.TANOAK, age_class, 0)
-            j = self._get_state_idx(Species.TANOAK, age_class+1, 0)
+            i = self._get_state_idx(utils.Species.TANOAK, age_class, 0)
+            j = self._get_state_idx(utils.Species.TANOAK, age_class+1, 0)
             A[i, i] += -self.params['trans_tanoak'][age_class]
             A[j, i] += self.params['trans_tanoak'][age_class]
             A[i+1, i+1] += -self.params['trans_tanoak'][age_class]
@@ -209,14 +208,14 @@ class MixedStandSimulator:
 
         # Primary infection
         for age_class in range(4):
-            i = self._get_state_idx(Species.TANOAK, age_class, 0)
+            i = self._get_state_idx(utils.Species.TANOAK, age_class, 0)
             A[i, i] -= self.params.get('primary_inf', 0.0)
             A[i+1, i] += self.params.get('primary_inf', 0.0)
             A[i+2, i+2] -= (self.params.get('primary_inf', 0.0) *
                             self.params.get('treat_eff', 0.0))
             A[i+1, i+2] += (self.params.get('primary_inf', 0.0) *
                             self.params.get('treat_eff', 0.0))
-        i = self._get_state_idx(Species.BAY, 0, 0)
+        i = self._get_state_idx(utils.Species.BAY, 0, 0)
         A[i, i] -= self.params.get('primary_inf', 0.0)
         A[i+1, i] += self.params.get('primary_inf', 0.0)
 

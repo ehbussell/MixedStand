@@ -17,7 +17,7 @@ from scipy import integrate
 from scipy.interpolate import interp1d
 import bocop_utils
 
-from . import utils
+from mixed_stand_model import utils
 
 
 class MixedStandApprox:

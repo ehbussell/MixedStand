@@ -6,8 +6,8 @@ import json
 import logging
 import os
 import numpy as np
-from . import parameters
-from . import mixed_stand_simulator as ms_sim
+from mixed_stand_model import parameters
+from mixed_stand_model import mixed_stand_simulator as ms_sim
 
 class Species(IntEnum):
     """Host species."""
