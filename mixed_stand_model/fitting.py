@@ -11,11 +11,10 @@ from scipy.optimize import minimize
 
 from . import mixed_stand_simulator as ms_sim
 from .mixed_stand_approx import MixedStandApprox
-from . import parameters
-from . import utils
 
 
-def scale_sim_model(setup, old_params, new_params, lower_bound=None, upper_bound=None, time_step=None):
+def scale_sim_model(setup, old_params, new_params, lower_bound=None, upper_bound=None,
+                    time_step=None):
     """Scale infection rates in simulation to match time scales using incorrect Cobb 2012 model.
 
     Model using new_params is scaled to match time scale using old_params.
@@ -195,7 +194,7 @@ class MixedStandFitter:
             self._sse, start_transformed, method="BFGS",
             options={'disp': True, 'maxiter': 2800},
             args=(inf_data, approx_model, bounds, scaling_matrix))
-        
+
         logging.info("%s", param_fit_transformed)
 
         param_fit = _reverse_logit_transform(param_fit_transformed.x, bounds)
