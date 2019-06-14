@@ -1,6 +1,8 @@
 """Test robustness of OL and MPC to parameter uncertainty."""
 
 import argparse
+import copy
+import json
 import logging
 import os
 import numpy as np
@@ -84,7 +86,14 @@ def run_optimisations(ensemble_and_fit, params, setup, n_optim_runs, standard_de
                       ol_pol=None):
     """Run open-loop and MPC optimisations over parameter distributions"""
 
-    approx_model = ms_approx.MixedStandApprox(setup, params, ensemble_and_fit['fit'])
+    with open(os.path.join("data", "scale_and_fit_results.json"), "r") as infile:
+        scale_and_fit_results = json.load(infile)
+
+    approx_params = copy.deepcopy(params)
+    approx_params['rogue_rate'] *= scale_and_fit_results['roguing_factor']
+    approx_params['rogue_cost'] /= scale_and_fit_results['roguing_factor']
+
+    approx_model = ms_approx.MixedStandApprox(setup, approx_params, ensemble_and_fit['fit'])
     sim_model = ms_sim.MixedStandSimulator(setup, params)
 
     if ol_pol is None:
@@ -160,7 +169,8 @@ def run_optimisations(ensemble_and_fit, params, setup, n_optim_runs, standard_de
         sim_model.params['inf_tanoak_to_bay'] = parameter_samples[i, 5]
         sim_model.params['inf_bay_to_bay'] = parameter_samples[i, 6]
 
-        mpc_controller = mpc.Controller(setup, sim_model.params, ensemble_and_fit['fit'])
+        mpc_controller = mpc.Controller(
+            setup, sim_model.params, ensemble_and_fit['fit'], approx_params=approx_params)
         _, _, mpc_control, mpc_obj = mpc_controller.optimise(**mpc_args)
         mpc_objs[i] = mpc_obj
         mpc_controls[i] = mpc_control

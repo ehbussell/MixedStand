@@ -74,11 +74,11 @@ def even_policy(time):
     """Even allocation across controls"""
     return np.array([0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1])
 
-def create_figure(objectives, controls, sort_order, setup, params):
+def create_figure(objectives, controls, sort_order, setup, params, ticks=None):
     """Generate actual figure from dataset for control sensitivity."""
 
     fig = plt.figure(figsize=(6, 4))
-    gs = gridspec.GridSpec(2, 4, height_ratios=[5, 1], wspace=0.7, hspace=0.4)
+    gs = gridspec.GridSpec(2, 4, height_ratios=[10, 1], wspace=0.7, hspace=0.4, left=0.05, top=0.93)
     gs0 = gridspec.GridSpecFromSubplotSpec(1, 3, subplot_spec=gs[0, 0], width_ratios=[1, 2, 1],
                                            wspace=1.5)
 
@@ -108,13 +108,9 @@ def create_figure(objectives, controls, sort_order, setup, params):
 
     p1 = ax1.pcolormesh(x, y, z, cmap=cmap, vmin=vmin, vmax=vmax)
 
-    opt_controls = np.array(controls)
-    roguing = (np.sum(opt_controls[:, 0:3, :], axis=1) * params['rogue_rate'] *
-               params['rogue_cost'] / params['max_budget'])
-    thinning = (np.sum(opt_controls[:, 3:7, :], axis=1) * params['thin_rate'] *
-                params['thin_cost'] / params['max_budget'])
-    protecting = (np.sum(opt_controls[:, 7:, :], axis=1) * params['protect_rate'] *
-                  params['protect_cost'] / params['max_budget'])
+    roguing = (np.sum(controls[:, 0:3, :], axis=1) / params['max_budget'])
+    thinning = (np.sum(controls[:, 3:7, :], axis=1) / params['max_budget'])
+    protecting = (np.sum(controls[:, 7:, :], axis=1) / params['max_budget'])
 
     x, y = np.meshgrid(setup['times'], range(len(sort_order)+1))
 
@@ -126,18 +122,20 @@ def create_figure(objectives, controls, sort_order, setup, params):
     ax1.set_ylabel("Parameter set")
 
     ax2.set_title("Thinning")
-    ax2.set_xlabel("Time")
+    ax2.set_xlabel("Time / yrs")
     ax3.set_title("Roguing")
-    ax3.set_xlabel("Time")
+    ax3.set_xlabel("Time / yrs")
     ax4.set_title("Protecting")
-    ax4.set_xlabel("Time")
+    ax4.set_xlabel("Time / yrs")
+    for ax in [ax1, ax2, ax3, ax4]:
+        ax.grid(False)
 
     fig.colorbar(p1, cax=cax1, label='% Difference in\nobjective', orientation='horizontal',
-                 ticks=[-25, 0.0, 25, 50], fraction=0.5)
+                 ticks=ticks, fraction=0.5)
 
-    fig.colorbar(p2, cax=cax2, label='Thin Expense', orientation='horizontal', fraction=0.5)
-    fig.colorbar(p3, cax=cax3, label='Rogue Expense', orientation='horizontal', fraction=0.5)
-    fig.colorbar(p4, cax=cax4, label='Protect Expense', orientation='horizontal', fraction=0.5)
+    fig.colorbar(p2, cax=cax2, label='Thin Expense', orientation='horizontal', fraction=0.15)
+    fig.colorbar(p3, cax=cax3, label='Rogue Expense', orientation='horizontal', fraction=0.15)
+    fig.colorbar(p4, cax=cax4, label='Protect Expense', orientation='horizontal', fraction=0.15)
 
     ax1.set_yticks(np.arange(0, 101, 10) + 0.5)
     ax1.set_yticklabels(np.arange(100, -1, -10),
@@ -149,7 +147,11 @@ def create_figure(objectives, controls, sort_order, setup, params):
     for i in np.arange(0, 101, 10):
         ax1.axhline(y=i+0.5, xmin=0, xmax=20, c="gray", linewidth=0.25, zorder=0.0, clip_on=False)
 
-    gs.tight_layout(fig)
+    fig.text(0.01, 0.98, "(a)", transform=fig.transFigure, fontsize=11, fontweight="semibold")
+    fig.text(0.25, 0.98, "(b)", transform=fig.transFigure, fontsize=11, fontweight="semibold")
+    fig.text(0.48, 0.98, "(c)", transform=fig.transFigure, fontsize=11, fontweight="semibold")
+    fig.text(0.72, 0.98, "(d)", transform=fig.transFigure, fontsize=11, fontweight="semibold")
+
     fig.canvas.draw()
 
     return fig
@@ -165,8 +167,7 @@ def make_plots(folder_name='param_sensitivity', run_mpc=False):
         summary_results = json.load(infile)
 
     no_control_states = []
-    ol_controls = []
-    mpc_controls = []
+
     for i in range(len(summary_results)):
         # No control runs
         model = ms_sim.MixedStandSimulator.load_run_class(
@@ -175,16 +176,12 @@ def make_plots(folder_name='param_sensitivity', run_mpc=False):
         state = np.sum(np.reshape(model.run['state'], (ncells, 15, -1)), axis=0) / ncells
         no_control_states.append(state)
 
-        # OL controls
-        approx_model = ms_approx.MixedStandApprox.load_optimisation_class(
-            os.path.join("data", folder_name, "ol_control_{}.pkl".format(i)))
-        ol_controls.append(approx_model.optimisation['control'])
+    # OL controls
+    ol_allocations = np.load(os.path.join("data", folder_name, "ol_alloc_results.npy"))
 
-        if run_mpc:
-            # MPC controls
-            mpc_controller = mpc.Controller.load_optimisation(
-                os.path.join("data", folder_name, "mpc_control_{}.pkl".format(i)))
-            mpc_controls.append(mpc_controller.control)
+    if run_mpc:
+        # MPC controls
+        mpc_allocations = np.load(os.path.join("data", folder_name, "mpc_alloc_results.npy"))
 
     model = ms_sim.MixedStandSimulator.load_run_class(
         os.path.join("data", folder_name, "no_control_baseline.pkl"))
@@ -253,10 +250,10 @@ def make_plots(folder_name='param_sensitivity', run_mpc=False):
 
     # Find baseline OL optimisation
     approx_model = ms_approx.MixedStandApprox.load_optimisation_class(
-        os.path.join("data", folder_name, "opt_control_baseline.pkl"))
+        os.path.join("data", folder_name, "ol_control_baseline.pkl"))
     control_policy = interp1d(setup['times'][:-1], approx_model.optimisation['control'],
                               kind="zero", fill_value="extrapolate")
-    _, baseline_obj, _ = approx_model.run_policy(control_policy)
+    _, baseline_obj, _ = model.run_policy(control_policy)
 
     # Find percentage difference from baseline
     ol_objectives = (100 * (np.array(ol_objectives) - baseline_obj) / baseline_obj)
@@ -274,16 +271,18 @@ def make_plots(folder_name='param_sensitivity', run_mpc=False):
         mpc_objectives = 100 * (np.array(mpc_objectives) - sim_run[1]) / sim_run[1]
         mpc_sort_order = np.argsort(mpc_objectives)
 
-    fig = create_figure(ol_objectives, ol_controls, ol_sort_order, setup, params)
+    fig = create_figure(ol_objectives, ol_allocations, ol_sort_order, setup, params,
+                        ticks=[-25, 0.0, 25, 50])
     fig.savefig(
-        os.path.join("figures", folder_name, "ol_controls.png"), dpi=300, bbox_inches='tight')
+        os.path.join("figures", folder_name, "ol_controls.pdf"), dpi=300, bbox_inches='tight')
 
     if run_mpc:
-        fig = create_figure(mpc_objectives, mpc_controls, mpc_sort_order, setup, params)
+        fig = create_figure(mpc_objectives, mpc_allocations, mpc_sort_order, setup, params,
+                            ticks=[-50, 0.0, 50, 100])
         fig.savefig(
-            os.path.join("figures", folder_name, "mpc_controls.png"), dpi=300, bbox_inches='tight')
+            os.path.join("figures", folder_name, "mpc_controls.pdf"), dpi=300, bbox_inches='tight')
 
-def main(n_reps=10, sigma=0.1, append=False, folder_name='parameter_sensitivity', run_mpc=False):
+def main(n_reps=10, sigma=0.25, append=False, folder_name='parameter_sensitivity', run_mpc=False):
     """Run sensitivity tests."""
 
     os.makedirs(os.path.join('data', folder_name), exist_ok=True)
@@ -304,30 +303,37 @@ def main(n_reps=10, sigma=0.1, append=False, folder_name='parameter_sensitivity'
         'use_init_first': True
     }
 
+    ncells = np.product(setup['landscape_dims'])
+
     # Baseline no control run
     model = ms_sim.MixedStandSimulator(setup, params)
     model.run_policy(control_policy=None, n_fixed_steps=None)
 
+    with open(os.path.join("data", "scale_and_fit_results.json"), "r") as infile:
+        scale_and_fit_results = json.load(infile)
+
     if not append:
         model.save_run(os.path.join("data", folder_name, "no_control_baseline.pkl"))
-
-        with open(os.path.join("data", "scale_and_fit_results.json"), "r") as infile:
-            scale_and_fit_results = json.load(infile)
 
         beta_names = ['beta_1,1', 'beta_1,2', 'beta_1,3', 'beta_1,4',
                       'beta_12', 'beta_21', 'beta_2']
         beta = np.array([scale_and_fit_results[x] for x in beta_names])
-        approx_model = ms_approx.MixedStandApprox(setup, params, beta)
+
+        approx_params = copy.deepcopy(params)
+        approx_params['rogue_rate'] *= scale_and_fit_results['roguing_factor']
+        approx_params['rogue_cost'] /= scale_and_fit_results['roguing_factor']
+        approx_model = ms_approx.MixedStandApprox(setup, approx_params, beta)
 
         logging.info("Running baseline OL control")
-        _, ol_control_policy, _ = approx_model.optimise(n_stages=20, init_policy=even_policy)
+        _, baseline_ol_control_policy, exit_text = approx_model.optimise(
+            n_stages=20, init_policy=even_policy)
         approx_model.save_optimisation(
             os.path.join("data", folder_name, "ol_control_baseline.pkl"))
 
         if run_mpc:
             logging.info("Running baseline MPC control")
-            mpc_args['init_policy'] = ol_control_policy
-            mpc_controller = mpc.Controller(setup, params, beta)
+            mpc_args['init_policy'] = baseline_ol_control_policy
+            mpc_controller = mpc.Controller(setup, params, beta, approx_params=approx_params)
             mpc_controller.optimise(**mpc_args)
             mpc_controller.save_optimisation(
                 os.path.join("data", folder_name, "mpc_control_baseline.pkl"))
@@ -341,31 +347,45 @@ def main(n_reps=10, sigma=0.1, append=False, folder_name='parameter_sensitivity'
     perturbing_params_lists = [
         'inf_tanoak_tanoak', 'nat_mort_tanoak', 'inf_mort_tanoak', 'trans_tanoak', 'recruit_tanoak']
 
-    ncells = np.product(model.setup['landscape_dims'])
-
     if append:
         logging.info("Loading previous dataset to append new data to")
-        # Read in data already generated
+        # Read in summary data already generated
         with open(os.path.join("data", folder_name, "summary.json"), "r") as infile:
             summary_results = json.load(infile)
 
+        approx_model = ms_approx.MixedStandApprox.load_optimisation_class(
+            os.path.join("data", folder_name, "ol_control_baseline.pkl"))
+        baseline_ol_control_policy = interp1d(
+            approx_model.setup['times'][:-1], approx_model.optimisation['control'], kind="zero",
+            fill_value="extrapolate")
+
         n_reps = (len(summary_results), len(summary_results)+n_reps)
+
+        ol_alloc_results = np.load(os.path.join("data", folder_name, "ol_alloc_results.npy"))
+        mpc_alloc_results = np.load(os.path.join("data", folder_name, "mpc_alloc_results.npy"))
     else:
         # Otherwise start afresh
         summary_results = []
+        ol_alloc_results = np.zeros((0, 9, len(setup['times']) - 1))
+        mpc_alloc_results = np.zeros((0, 9, len(setup['times']) - 1))
         n_reps = (0, n_reps)
 
     error_dist = truncnorm(-1.0/sigma, np.inf, loc=1.0, scale=sigma)
 
     for i in range(*n_reps):
-        # 2. Perturb these parameters using Normal distribution, sigma 10%
+        # 2. Perturb these parameters using Normal distribution, sigma 25%
         logging.info("Perturbing parameter set %d of %d with sigma %f", i+1, n_reps[1], sigma)
         new_params = copy.deepcopy(params)
         for param_key in perturbing_params_numbers:
             new_params[param_key] = new_params[param_key] * error_dist.rvs()
         for param_key in perturbing_params_lists:
             new_params[param_key] = (
-                new_params[param_key] * truncnorm.rvs(size=len(new_params[param_key])))
+                new_params[param_key] * error_dist.rvs(size=len(new_params[param_key])))
+        
+        # Set space weights and recruitment rates to NaN so can be recaluclated for dyn equilibrium
+        new_params['recruit_bay'] = np.nan
+        new_params['recruit_redwood'] = np.nan
+        new_params['space_tanoak'] = np.full(4, np.nan)
 
         # 3. Recalculate space weights & recruitment rates to give dynamic equilibrium
         new_params, _ = utils.initialise_params(new_params, host_props=parameters.COBB_PROP_FIG4A)
@@ -378,25 +398,111 @@ def main(n_reps=10, sigma=0.1, append=False, folder_name='parameter_sensitivity'
         # 5. Fit approximate model
         _, beta = scale_and_fit.fit_beta(setup, new_params)
 
+        approx_new_params = copy.deepcopy(params)
+        approx_new_params['rogue_rate'] *= scale_and_fit_results['roguing_factor']
+        approx_new_params['rogue_cost'] /= scale_and_fit_results['roguing_factor']
+
         # 6. Optimise control (open-loop)
-        approx_model = ms_approx.MixedStandApprox(setup, new_params, beta)
-        approx_model.optimise(n_stages=20, init_policy=even_policy)
+        approx_model = ms_approx.MixedStandApprox(setup, approx_new_params, beta)
+        *_, exit_text = approx_model.optimise(n_stages=20, init_policy=baseline_ol_control_policy)
+
+        if exit_text not in ["Optimal Solution Found.", "Solved To Acceptable Level."]:
+            logging.warning("Failed optimisation. Trying intialisation from previous solution.")
+            filename = os.path.join(
+                os.path.dirname(os.path.realpath(__file__)), '..', 'mixed_stand_model', "BOCOP",
+                "problem.def")
+
+            with open(filename, "r") as infile:
+                all_lines = infile.readlines()
+            all_lines[31] = "# " + all_lines[31]
+            all_lines[32] = "# " + all_lines[32]
+            all_lines[33] = all_lines[33][2:]
+            all_lines[34] = all_lines[34][2:]
+            with ms_approx._try_file_open(filename) as outfile:
+                outfile.writelines(all_lines)
+
+            *_, exit_text = approx_model.optimise(
+                n_stages=20, init_policy=baseline_ol_control_policy)
+
+            all_lines[31] = all_lines[31][2:]
+            all_lines[32] = all_lines[32][2:]
+            all_lines[33] = "# " + all_lines[33]
+            all_lines[34] = "# " + all_lines[34]
+            with ms_approx._try_file_open(filename) as outfile:
+                outfile.writelines(all_lines)
+
+            if exit_text not in ["Optimal Solution Found.", "Solved To Acceptable Level."]:
+                logging.error("Failed optimisation. Falling back to init policy.")
+
         approx_model.save_optimisation(
             os.path.join("data", folder_name, "ol_control_{}.pkl".format(i)))
 
         # Run OL control to get objective
         ol_control_policy = interp1d(setup['times'][:-1], approx_model.optimisation['control'],
                                      kind="zero", fill_value="extrapolate")
-        approx_model.run_policy(ol_control_policy)
-        ol_obj = approx_model.run['objective']
+        sim_run = model.run_policy(ol_control_policy)
+        ol_obj = model.run['objective']
+        sim_state = np.sum(np.reshape(sim_run[0], (ncells, 15, -1)), axis=0) / ncells
+        allocation = (np.array([
+            sim_state[1] + sim_state[4],
+            sim_state[7] + sim_state[10],
+            sim_state[13],
+            np.sum(sim_state[0:6], axis=0),
+            np.sum(sim_state[6:12], axis=0),
+            sim_state[12] + sim_state[13],
+            sim_state[14],
+            sim_state[0] + sim_state[3],
+            sim_state[6] + sim_state[9]])[:, :-1] * approx_model.optimisation['control'])
+
+        allocation[0:3] *= params['rogue_rate'] * params['rogue_cost']
+        allocation[3:7] *= params['thin_rate'] * params['thin_cost']
+        allocation[7:] *= params['protect_rate'] * params['protect_cost']
+        allocation[0] *= params['rel_small_cost']
+        allocation[3] *= params['rel_small_cost']
+
+        expense = utils.control_expenditure(
+            approx_model.optimisation['control'], new_params, sim_state[:, :-1])
+        for j in range(len(setup['times'])-1):
+            if expense[j] > new_params['max_budget']:
+                allocation[:, j] *= new_params['max_budget'] / expense[j]
+
+        ol_alloc_results = np.concatenate([ol_alloc_results, [allocation]], axis=0)
 
         if run_mpc:
             mpc_args['init_policy'] = ol_control_policy
             # Optimise control (MPC)
-            mpc_controller = mpc.Controller(setup, params, beta)
+            mpc_controller = mpc.Controller(setup, new_params, beta,
+                                            approx_params=approx_new_params)
             *_, mpc_obj = mpc_controller.optimise(**mpc_args)
             mpc_controller.save_optimisation(
                 os.path.join("data", folder_name, "mpc_control_{}.pkl".format(i)))
+            sim_run, _ = mpc_controller.run_control()
+
+            sim_state = np.sum(np.reshape(sim_run[0], (ncells, 15, -1)), axis=0) / ncells
+            allocation = (np.array([
+                sim_state[1] + sim_state[4],
+                sim_state[7] + sim_state[10],
+                sim_state[13],
+                np.sum(sim_state[0:6], axis=0),
+                np.sum(sim_state[6:12], axis=0),
+                sim_state[12] + sim_state[13],
+                sim_state[14],
+                sim_state[0] + sim_state[3],
+                sim_state[6] + sim_state[9]])[:, :-1] * mpc_controller.control)
+
+            allocation[0:3] *= params['rogue_rate'] * params['rogue_cost']
+            allocation[3:7] *= params['thin_rate'] * params['thin_cost']
+            allocation[7:] *= params['protect_rate'] * params['protect_cost']
+            allocation[0] *= params['rel_small_cost']
+            allocation[3] *= params['rel_small_cost']
+
+            expense = utils.control_expenditure(
+                mpc_controller.control, new_params, sim_state[:, :-1])
+            for j in range(len(setup['times'])-1):
+                if expense[j] > new_params['max_budget']:
+                    allocation[:, j] *= new_params['max_budget'] / expense[j]
+
+            mpc_alloc_results = np.concatenate([mpc_alloc_results, [allocation]], axis=0)
 
         list_keys = ['inf_tanoak_tanoak', 'nat_mort_tanoak', 'inf_mort_tanoak', 'trans_tanoak',
                      'recruit_tanoak', 'space_tanoak']
@@ -411,9 +517,13 @@ def main(n_reps=10, sigma=0.1, append=False, folder_name='parameter_sensitivity'
             'mpc_objective': mpc_obj
         })
 
-    # Write summary results to file
-    with open(os.path.join("data", folder_name, "summary.json"), "w") as outfile:
-        json.dump(summary_results, outfile, indent=4)
+        # Write summary results to file
+        with open(os.path.join("data", folder_name, "summary.json"), "w") as outfile:
+            json.dump(summary_results, outfile, indent=4)
+
+        # Save control allocations to file
+        np.save(os.path.join("data", folder_name, "ol_alloc_results.npy"), ol_alloc_results)
+        np.save(os.path.join("data", folder_name, "mpc_alloc_results.npy"), mpc_alloc_results)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
@@ -422,7 +532,7 @@ if __name__ == "__main__":
 
     parser.add_argument("-n", "--n_reps", default=10, type=int,
                         help="Number of parameter sets to generate")
-    parser.add_argument("-s", "--sigma", default=0.1, type=float,
+    parser.add_argument("-s", "--sigma", default=0.25, type=float,
                         help="Sigma to use to perturb parameter set")
     parser.add_argument("-f", "--folder", default='param_sensitivity',
                         help="Folder name to save results in data and figures directory.")

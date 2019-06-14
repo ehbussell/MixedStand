@@ -7,11 +7,17 @@ import json
 import logging
 import os
 import numpy as np
+from scipy.optimize import minimize
 
 from mixed_stand_model import fitting
 from mixed_stand_model import parameters
 from mixed_stand_model import utils
 from mixed_stand_model import mixed_stand_simulator as ms_sim
+from mixed_stand_model import mixed_stand_approx as ms_approx
+
+def const_rogue_policy(state):
+    """Even allocation of resources across roguing controls."""
+    return np.array([1.0]*3 + [0.0]*4 + [0.0]*2)
 
 def fit_beta(setup, params, no_bay_dataset=None, with_bay_dataset=None, start=None):
     """Fit approx model beta values."""
@@ -56,6 +62,60 @@ def fit_beta(setup, params, no_bay_dataset=None, with_bay_dataset=None, start=No
 
     return tanoak_factors, beta
 
+def scale_control():
+    """Parameterise roguing control in approximate model to match simulations."""
+
+    test_rates = np.linspace(0, 1.0, 51)
+
+    # First run simulations for range of roguing rates, with constant control rates
+    setup, params = utils.get_setup_params(
+        parameters.CORRECTED_PARAMS, scale_inf=True, host_props=parameters.COBB_PROP_FIG4A)
+
+    with open(os.path.join("data", "scale_and_fit_results.json"), "r") as infile:
+        scale_and_fit_results = json.load(infile)
+
+    sim_tans = np.zeros_like(test_rates)
+    ncells = np.product(setup['landscape_dims'])
+
+    for i, rate in enumerate(test_rates):
+        params['rogue_rate'] = rate
+        model = ms_sim.MixedStandSimulator(setup, params)
+
+        sim_run = model.run_policy(const_rogue_policy)
+        sim_state = np.sum(sim_run[0].reshape((ncells, 15, -1)), axis=0) / ncells
+        sim_tans[i] = np.sum(sim_state[[6, 8, 9, 11], -1])
+
+        logging.info("Sim run, rate: %f, healthy tans: %f", rate, sim_tans[i])
+
+    def min_func(factor):
+        """Function to minimise, SSE between healthy tanoak over range of rates."""
+
+        approx_tans = np.zeros_like(test_rates)
+
+        setup, params = utils.get_setup_params(
+            parameters.CORRECTED_PARAMS, scale_inf=True, host_props=parameters.COBB_PROP_FIG4A)
+
+        beta_names = ['beta_1,1', 'beta_1,2', 'beta_1,3', 'beta_1,4',
+                      'beta_12', 'beta_21', 'beta_2']
+        beta = np.array([scale_and_fit_results[x] for x in beta_names])
+
+        for i, rate in enumerate(test_rates):
+            params['rogue_rate'] = rate * factor
+            approx_model = ms_approx.MixedStandApprox(setup, params, beta)
+            approx_run = approx_model.run_policy(const_rogue_policy)
+
+            approx_tans[i] = np.sum(approx_run[0][[6, 8, 9, 11], -1])
+
+            logging.info("Approx run, Factor %f, Rate: %f, tans: %f", factor, rate, approx_tans[i])
+
+        return np.sum(np.square(approx_tans - sim_tans))
+
+    ret = minimize(min_func, [1.0], bounds=[(0, 2)])
+
+    logging.info(ret)
+
+    return ret.x[0]
+
 def main(filename):
     """Run fitting process: scale simulations and fit approximate models."""
 
@@ -74,8 +134,6 @@ def main(filename):
     results = {'sim_scaling_factor': scaling_factor}
     with open(filename+'.json', "w") as outfile:
         json.dump(results, outfile, indent=4)
-    # with open(filename+'.json', "r") as infile:
-    #     results = json.load(infile)
 
     setup, params = utils.get_setup_params(
         parameters.CORRECTED_PARAMS, scale_inf=True, host_props=parameters.COBB_PROP_FIG4A)
@@ -90,6 +148,11 @@ def main(filename):
     with open(filename+'.json', "w") as outfile:
         json.dump(results, outfile, indent=4)
 
+    roguing_factor = scale_control()
+    results['roguing_factor'] = roguing_factor
+    with open(filename+'.json', "w") as outfile:
+        json.dump(results, outfile, indent=4)
+
 def run_scan(filename):
     """Scan over scaling factors."""
 
@@ -97,7 +160,7 @@ def run_scan(filename):
 
     setup, new_params = utils.get_setup_params(
         parameters.CORRECTED_PARAMS, scale_inf=False, host_props=parameters.COBB_PROP_FIG4A)
-    setup['times'] = np.arange(0, 300, step=0.001)
+    setup['times'] = np.arange(0, 50, step=0.01)
 
     cross_over_times = []
 

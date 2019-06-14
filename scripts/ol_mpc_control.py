@@ -1,5 +1,7 @@
 """Analyse OL and MPC control strategies, and effect of MPC update frequency."""
 
+import pdb
+import copy
 import json
 import logging
 import os
@@ -31,6 +33,7 @@ def make_plots():
     approx_model = ms_approx.MixedStandApprox.load_optimisation_class(
         os.path.join("data", "ol_mpc_control", "ol_control.pkl"))
 
+    ol_control = approx_model.optimisation['control']
     ol_control_policy = interp1d(
         approx_model.setup['times'][:-1], approx_model.optimisation['control'], kind="zero",
         fill_value="extrapolate")
@@ -38,6 +41,8 @@ def make_plots():
 
     mpc_controller = mpc.Controller.load_optimisation(
         os.path.join("data", "ol_mpc_control", "mpc_control_20.pkl"))
+    mpc_controller.approx_params = approx_model.params
+
     sim_model = ms_sim.MixedStandSimulator(mpc_controller.setup, mpc_controller.params)
     nc_sim_run = sim_model.run_policy()
     ol_sim_run = sim_model.run_policy(ol_control_policy)
@@ -55,7 +60,8 @@ def make_plots():
     ax_leg.set_yticks([])
 
     visualisation.plot_control(
-        approx_model.setup['times'], ol_control_policy, approx_model.params, ax=ax1)
+        approx_model.setup['times'][:-1], ol_control, ol_approx_run[0][:, :-1],
+        approx_model.params, ax=ax1)
     ax_leg.legend(*ax1.get_legend_handles_labels(), loc="center", ncol=3)
     ax1.set_xlabel("Time")
     ax1.set_ylabel("Control Expenditure")
@@ -93,10 +99,11 @@ def make_plots():
     fig.savefig(
         os.path.join("figures", "ol_mpc_control", "open_loop.pdf"), dpi=300, bbox_inches='tight')
 
-    # Run MPC runs for 'standard' freuqency (20yrs)
+    # Run MPC runs for 'standard' frequency (20yrs)
     mpc_sim_run, mpc_approx_run = mpc_controller.run_control()
     mpc_control_policy = interp1d(
         mpc_controller.times[:-1], mpc_controller.control, kind="zero", fill_value="extrapolate")
+    mpc_sim_state = np.sum(np.reshape(mpc_sim_run[0], (ncells, 15, -1)), axis=0) / ncells
 
     fig = plt.figure(figsize=(6.4, 6.4))
     gs = gridspec.GridSpec(3, 2, height_ratios=[3, 1, 5], wspace=0.3, hspace=0.25)
@@ -109,7 +116,8 @@ def make_plots():
     ax_leg.set_yticks([])
 
     visualisation.plot_control(
-        approx_model.setup['times'], mpc_control_policy, approx_model.params, ax=ax1)
+        approx_model.setup['times'][:-1], mpc_controller.control, mpc_sim_state[:, :-1],
+        approx_model.params, ax=ax1)
     ax_leg.legend(*ax1.get_legend_handles_labels(), loc="center", ncol=3)
     ax1.set_xlabel("Time")
     ax1.set_ylabel("Control Expenditure")
@@ -119,8 +127,6 @@ def make_plots():
     ax2.legend(bbox_to_anchor=(0.5, -0.25), loc="upper center", ncol=2, fontsize=8)
     ax2.set_xlabel("Time")
     ax2.set_ylabel("Host stems")
-
-    mpc_sim_state = np.sum(np.reshape(mpc_sim_run[0], (ncells, 15, -1)), axis=0) / ncells
 
     visualisation.plot_hosts(
         mpc_controller.times, mpc_sim_state, ax=ax2, proportions=False, alpha=0.75,
@@ -186,13 +192,14 @@ def make_plots():
     for i, freq in enumerate(mpc_freqs):
         mpc_controller = mpc.Controller.load_optimisation(
             os.path.join("data", "ol_mpc_control", "mpc_control_{}.pkl".format(freq)))
+        mpc_controller.approx_params = approx_model.params
         mpc_sim_run, mpc_approx_run = mpc_controller.run_control()
 
         mpc_freqs_tan[i] = -(mpc_sim_run[1] - mpc_sim_run[2][-1])
         mpc_freqs_div[i] = -1*(mpc_sim_run[2][-1])
 
     b1 = ax.bar(mpc_freqs, mpc_freqs_tan)
-    b2 = ax.bar(mpc_freqs, mpc_freqs_div+mpc_freqs_tan, bottom=mpc_freqs_tan)
+    b2 = ax.bar(mpc_freqs, mpc_freqs_div, bottom=mpc_freqs_tan)
     ax.set_ylabel("Objective")
     ax.set_xlabel("MPC update frequency")
     ax.legend((b1[0], b2[0]), ('Healthy large tanoak', 'Diversity'), bbox_to_anchor=(0.5, -0.25),
@@ -217,7 +224,12 @@ def make_data():
     # Setup approximate model
     beta_names = ['beta_1,1', 'beta_1,2', 'beta_1,3', 'beta_1,4', 'beta_12', 'beta_21', 'beta_2']
     beta = np.array([scale_and_fit_results[x] for x in beta_names])
-    approx_model = ms_approx.MixedStandApprox(setup, params, beta)
+
+    approx_params = copy.deepcopy(params)
+    approx_params['rogue_rate'] *= scale_and_fit_results['roguing_factor']
+    approx_params['rogue_cost'] /= scale_and_fit_results['roguing_factor']
+
+    approx_model = ms_approx.MixedStandApprox(setup, approx_params, beta)
 
     # Run open-loop optimisation
     _, ol_control_policy, _ = approx_model.optimise(n_stages=20, init_policy=even_policy)
@@ -225,7 +237,7 @@ def make_data():
 
     # Run MPC optimisation for range of update periods
     update_periods = np.arange(5, 105, 5)
-    mpc_controller = mpc.Controller(setup, params, beta)
+    mpc_controller = mpc.Controller(setup, params, beta, approx_params=approx_params)
     for update_period in update_periods:
         mpc_controller.optimise(
             horizon=100, time_step=0.5, end_time=100, update_period=update_period,
