@@ -20,8 +20,12 @@ def even_policy(time):
     """Even allocation across controls"""
     return np.array([0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1])
 
-def generate_ensemble_and_fit(setup, params, n_ensemble_runs, standard_dev):
+def generate_ensemble_and_fit(n_ensemble_runs, standard_dev):
     """Generate ensemble of simulation runs and fit approximate model."""
+
+    setup, params = utils.get_setup_params(
+        parameters.CORRECTED_PARAMS, scale_inf=True, host_props=parameters.COBB_PROP_FIG4A,
+        extra_spread=True)
 
     model = ms_sim.MixedStandSimulator(setup, params)
 
@@ -76,7 +80,7 @@ def generate_ensemble_and_fit(setup, params, n_ensemble_runs, standard_dev):
     }
 
     _, beta = scale_and_fit.fit_beta(setup, params, no_bay_dataset=simulation_runs_no_cross_trans,
-                                     with_bay_dataset=simulation_runs, start=baseline_beta)
+                                     with_bay_dataset=simulation_runs)
 
     ret_dict['fit'] = beta
 
@@ -193,8 +197,7 @@ def run_all(n_ens=10, n_opt=10, folder=None, append=False):
     if folder is None:
         folder = os.path.join(os.path.realpath(__file__), '..', '..', 'data', 'param_uncert')
 
-    error_std_devs = np.array([
-        0.0, 0.025, 0.05, 0.075, 0.1, 0.125, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4])
+    error_std_devs = np.array([0.0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4])
 
     for std_dev in error_std_devs:
         logging.info("Starting analysis with %f standard deviation", std_dev)
@@ -221,10 +224,9 @@ def run_all(n_ens=10, n_opt=10, folder=None, append=False):
                 for key in data.keys():
                     ensemble_and_fit[key] = data[key]
         else:
-            ensemble_and_fit = generate_ensemble_and_fit(setup, params, n_ens, std_dev)
+            ensemble_and_fit = generate_ensemble_and_fit(n_ens, std_dev)
             np.savez_compressed(os.path.join(folder, "fitting_ensemble_data_" + str(std_dev)),
                                 **ensemble_and_fit)
-
 
         if append:
             logging.info("Appending to existing dataset.")
@@ -272,8 +274,7 @@ def make_plots(data_folder=None, fig_folder=None):
         fig_folder = os.path.join(
             os.path.realpath(__file__), '..', '..', 'figures', 'param_uncert')
 
-    error_std_devs = np.array([
-        0.0, 0.025, 0.05, 0.075, 0.1, 0.125, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4])
+    error_std_devs = np.array([0.0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4])
     x_data = []
     ol_objs = []
     mpc_objs = []
