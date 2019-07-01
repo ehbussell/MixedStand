@@ -83,7 +83,7 @@ def control_expenditure(control, params, state):
 
     return expenditure
 
-def get_setup_params(base_params=None, scale_inf=True, state_init=None, host_props=None, inf=True):
+def get_setup_params(base_params=None, scale_inf=True, state_init=None, host_props=None, inf=True, extra_spread=True):
     """Construct setup and parameters"""
 
     if base_params is None:
@@ -124,11 +124,12 @@ def get_setup_params(base_params=None, scale_inf=True, state_init=None, host_pro
         'times': np.linspace(0, 100.0, 201)
     }
 
-    setup['times'] = np.linspace(0, 6, 13)
-    model = ms_sim.MixedStandSimulator(setup, params)
-    init_run, *_ = model.run_policy(control_policy=None, n_fixed_steps=None)
-    setup['times'] = np.linspace(0, 100, 201)
-    setup['state_init'] = init_run[:, -1]
+    if extra_spread:
+        setup['times'] = np.linspace(0, 6, 13)
+        model = ms_sim.MixedStandSimulator(setup, params)
+        init_run, *_ = model.run_policy(control_policy=None, n_fixed_steps=None)
+        setup['times'] = np.linspace(0, 100, 201)
+        setup['state_init'] = init_run[:, -1]
 
     logging.info("Using landscape dimensions (%d, %d)", *setup['landscape_dims'])
     if inf:
