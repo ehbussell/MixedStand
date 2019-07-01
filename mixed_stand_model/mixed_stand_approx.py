@@ -162,7 +162,7 @@ class MixedStandApprox:
             logging.info("Setting initial state directly")
             self.setup['state_init'] = state_init
 
-    def state_deriv(self, time, state, control_func=None):
+    def state_deriv(self, time, state, control_func=None, alloc_func=None):
         """Return state derivative for 3 species model, including integrated objective function.
 
         control_function:   Function of time returning proportion of control rate allocated to each
@@ -242,13 +242,36 @@ class MixedStandApprox:
             d_state[3*i+2] -= self.params.get("vaccine_decay", 0.0) * state[3*i+2]
             d_state[3*i] += self.params.get("vaccine_decay", 0.0) * state[3*i+2]
 
-        if control_func is not None:
-            control = control_func(time)
+        if (control_func is not None) or (alloc_func is not None):
+            if control_func is not None:
+                control = control_func(time)
 
-            expense = utils.control_expenditure(control, self.params, state)
+                expense = utils.control_expenditure(control, self.params, state)
 
-            if expense > self.params['max_budget']:
-                control *= self.params['max_budget'] / expense
+                if expense > self.params['max_budget']:
+                    control *= self.params['max_budget'] / expense
+
+            else:
+                controlled_state = np.array([
+                    state[1] + state[4],
+                    state[7] + state[10],
+                    state[13],
+                    np.sum(state[0:6], axis=0),
+                    np.sum(state[6:12], axis=0),
+                    state[12] + state[13],
+                    state[14],
+                    state[0] + state[3],
+                    state[6] + state[9]])
+                alloc = alloc_func(time)
+
+                alloc[0:3] /= (self.params['rogue_rate'] * self.params['rogue_cost'])
+                alloc[3:7] /= (self.params['thin_rate'] * self.params['thin_cost'])
+                alloc[7:] /= (self.params['protect_rate'] * self.params['protect_cost'])
+                alloc[0] /= self.params['rel_small_cost']
+                alloc[3] /= self.params['rel_small_cost']
+
+                control = np.clip(
+                    np.clip(alloc, 0.0, controlled_state) / controlled_state, 0.0, 1.0)
 
             control[0:3] *= self.params.get('rogue_rate', 0.0)
             control[3:7] *= self.params.get('thin_rate', 0.0)
@@ -286,10 +309,12 @@ class MixedStandApprox:
 
         return d_state
 
-    def run_policy(self, control_policy=None, n_fixed_steps=None, obj_start=0.0):
+    def run_policy(self, control_policy=None, alloc_policy=None, n_fixed_steps=None, obj_start=0.0):
         """Run forward simulation using a given control policy.
 
         Function control_policy(t)
+
+        Alternatively define allocation policy A(t, X) that return fX
 
         -------
         Returns
@@ -302,7 +327,7 @@ class MixedStandApprox:
         ode.set_integrator('lsoda', nsteps=10000, atol=1e-10, rtol=1e-8)
         ode.set_initial_value(
             np.append(self.setup['state_init'], [obj_start]), self.setup['times'][0])
-        ode.set_f_params(control_policy)
+        ode.set_f_params(control_policy, alloc_policy)
 
         logging.debug("Starting ODE run")
 
