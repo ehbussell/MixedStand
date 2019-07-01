@@ -77,6 +77,8 @@ def even_policy(time):
 def create_figure(objectives, controls, sort_order, setup, params, ticks=None):
     """Generate actual figure from dataset for control sensitivity."""
 
+    n_reps = len(objectives)
+
     fig = plt.figure(figsize=(6, 4))
     gs = gridspec.GridSpec(2, 4, height_ratios=[10, 1], wspace=0.7, hspace=0.4, left=0.05, top=0.93)
     gs0 = gridspec.GridSpecFromSubplotSpec(1, 3, subplot_spec=gs[0, 0], width_ratios=[1, 2, 1],
@@ -137,14 +139,14 @@ def create_figure(objectives, controls, sort_order, setup, params, ticks=None):
     fig.colorbar(p3, cax=cax3, label='Rogue Expense', orientation='horizontal', fraction=0.15)
     fig.colorbar(p4, cax=cax4, label='Protect Expense', orientation='horizontal', fraction=0.15)
 
-    ax1.set_yticks(np.arange(0, 101, 10) + 0.5)
-    ax1.set_yticklabels(np.arange(100, -1, -10),
+    ax1.set_yticks(np.arange(0, n_reps+1, 20) + 0.5)
+    ax1.set_yticklabels(np.arange(200, -1, -20),
                         fontdict={'fontsize': 4, 'weight': 'bold'})
     plt.setp(ax2.get_yticklabels(), visible=False)
     plt.setp(ax3.get_yticklabels(), visible=False)
     plt.setp(ax4.get_yticklabels(), visible=False)
 
-    for i in np.arange(0, 101, 10):
+    for i in np.arange(0, n_reps+1, 20):
         ax1.axhline(y=i+0.5, xmin=0, xmax=20, c="gray", linewidth=0.25, zorder=0.0, clip_on=False)
 
     fig.text(0.01, 0.98, "(a)", transform=fig.transFigure, fontsize=11, fontweight="semibold")
@@ -272,7 +274,7 @@ def make_plots(folder_name='param_sensitivity', run_mpc=False):
         mpc_sort_order = np.argsort(mpc_objectives)
 
     fig = create_figure(ol_objectives, ol_allocations, ol_sort_order, setup, params,
-                        ticks=[-25, 0.0, 25, 50])
+                        ticks=[0.0, 200, 400])
     fig.savefig(
         os.path.join("figures", folder_name, "ol_controls.pdf"), dpi=300, bbox_inches='tight')
 
