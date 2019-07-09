@@ -1,6 +1,7 @@
 """Test robustness of OL and MPC to observational uncertainty."""
 
 import argparse
+import copy
 import json
 import logging
 import os
@@ -25,17 +26,53 @@ def observer_factory(pop_size, n_samples):
         """Observe simulation state with uncertainty -> approximate state."""
 
         # First average over cells to get non-spatial distribution
-        ncells = len(state) / 15
-        mixed_state = np.sum(np.reshape(state, (int(ncells), 15)), axis=0) / ncells
+        ncells = int(np.round(len(state) / 15, 0))
+        state_by_cell = np.reshape(state, (int(ncells), 15))
+
+        # Species proportions
+        species_by_cell = np.array([
+            np.sum(state_by_cell[:, 0:3], axis=1),
+            np.sum(state_by_cell[:, 3:6], axis=1),
+            np.sum(state_by_cell[:, 6:9], axis=1),
+            np.sum(state_by_cell[:, 9:12], axis=1),
+            np.sum(state_by_cell[:, 12:14], axis=1),
+            state_by_cell[:, 14]
+        ]).T
 
         # Add empty space to be sampled also
-        mixed_props = np.append(mixed_state, 1.0 - np.sum(mixed_state))
+        space = np.array(1.0 - np.sum(state_by_cell, axis=1)).reshape((400, 1))
+        cell_props = np.append(species_by_cell, space, axis=1)
 
         # Create population of hosts and sample appropriately
-        population = np.array(pop_size * mixed_props, dtype=int)
-        sample = sample_without_replacement(pop_size, n_samples)
-        bins = np.append([0.0], np.cumsum(population))
-        obs_state = (np.histogram(sample, bins)[0] / n_samples)[:-1]
+        population = np.array(pop_size * cell_props)
+        obs_states = []
+        for i in range(ncells):
+            sample = sample_without_replacement(pop_size, n_samples)
+            bins = np.append([0.0], np.cumsum(population[i]))
+            observed_species = np.histogram(sample, bins)[0]
+
+            observed_state = np.zeros(15)
+
+            # Tanoak
+            for j in range(4):
+                idcs = ((3*j), (3*j+3))
+                inf_probs = state_by_cell[i, idcs[0]:idcs[1]] / np.sum(
+                    state_by_cell[i, idcs[0]:idcs[1]])
+                inf_sample = np.random.choice(3, observed_species[j], p=inf_probs)
+                observed_state[idcs[0]:idcs[1]] = np.histogram(inf_sample, range(4))[0]
+
+            # Bay
+            inf_probs = state_by_cell[i, 12:14] / np.sum(state_by_cell[i, 12:14])
+            inf_sample = np.random.choice(2, observed_species[4], p=inf_probs)
+            observed_state[12:14] = np.histogram(inf_sample, range(3))[0]
+
+            # Redwood
+            observed_state[14] = observed_species[5]
+
+            obs_states.append(observed_state)
+
+        obs_states = np.array(obs_states)
+        obs_state = (np.sum(obs_states, axis=0) / (n_samples * ncells))
 
         return obs_state
 
@@ -50,16 +87,20 @@ def make_data(n_reps=10, folder=None, append=False):
     setup, params = utils.get_setup_params(
         parameters.CORRECTED_PARAMS, scale_inf=True, host_props=parameters.COBB_PROP_FIG4A)
 
-    # In Cobb (2012) average plot density was 561 stems per ha
-    # This simulation is over 20 ha.
+    ncells = np.product(setup['landscape_dims'])
 
-    pop_size = np.product(setup['landscape_dims']) * 561 * 20 / np.sum(setup['state_init'])
-    sampling_nums = list(map(int, pop_size * np.array([0.05, 0.1, 0.25, 0.5, 0.75])))
+    # Use population size of 500 as 500m2 per cell
+    pop_size = 500
+    sampling_nums = np.array([1, 5, 10, 25, 50, 100, 250, 500])
 
     with open(os.path.join("data", "scale_and_fit_results.json"), "r") as infile:
         scale_and_fit_results = json.load(infile)
     beta_names = ['beta_1,1', 'beta_1,2', 'beta_1,3', 'beta_1,4', 'beta_12', 'beta_21', 'beta_2']
     beta = np.array([scale_and_fit_results[x] for x in beta_names])
+
+    approx_params = copy.deepcopy(params)
+    approx_params['rogue_rate'] *= scale_and_fit_results['roguing_factor']
+    approx_params['rogue_cost'] /= scale_and_fit_results['roguing_factor']
 
     mpc_args = {
         'horizon': 100,
@@ -71,7 +112,7 @@ def make_data(n_reps=10, folder=None, append=False):
         'use_init_first': True
     }
 
-    approx_model = ms_approx.MixedStandApprox(setup, params, beta)
+    approx_model = ms_approx.MixedStandApprox(setup, approx_params, beta)
     _, baseline_ol_control, _ = approx_model.optimise(n_stages=20, init_policy=even_policy)
     mpc_args['init_policy'] = baseline_ol_control
 
@@ -81,18 +122,26 @@ def make_data(n_reps=10, folder=None, append=False):
         observer = observer_factory(pop_size, n_samples)
 
         mpc_controls = np.zeros((n_reps, 9, len(setup['times']) - 1))
-        mpc_objs = []
+        mpc_objs = np.zeros(n_reps)
+
         # For storing observed states:
         mpc_approx_states = np.zeros((n_reps, 4, 15)) # 4 as 4 update steps excluding the start
+        mpc_actual_states = np.zeros((n_reps, 4, 15))
 
         # MPC runs - approximate model initialised correctly, & then observed at update steps
         for i in range(n_reps):
-            mpc_controller = mpc.Controller(setup, params, beta)
+
+
+            mpc_controller = mpc.Controller(setup, params, beta, approx_params=approx_params)
             _, _, mpc_control, mpc_obj = mpc_controller.optimise(**mpc_args, observer=observer)
 
-            mpc_objs.append(mpc_obj)
+            mpc_objs[i] = mpc_obj
             mpc_controls[i] = mpc_control
             mpc_approx_states[i] = mpc_controller.approx_update_states
+
+            sim_run, approx_run = mpc_controller.run_control()
+            sim_state = np.sum(np.reshape(sim_run[0], (ncells, 15, -1)), axis=0) / ncells
+            mpc_actual_states[i] = sim_state[:, [40, 80, 120, 160]].T
 
             logging.info("MPC run %d of %d done", i+1, n_reps)
 
@@ -110,7 +159,8 @@ def make_data(n_reps=10, folder=None, append=False):
         dataset = {
             'mpc_controls': mpc_controls,
             'mpc_objs': mpc_objs,
-            'mpc_approx_states': mpc_approx_states
+            'mpc_approx_states': mpc_approx_states,
+            'mpc_actual_states': mpc_actual_states
         }
         np.savez_compressed(os.path.join(folder, "sampled_data_" + str(n_samples)), **dataset)
 
