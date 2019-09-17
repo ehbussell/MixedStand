@@ -173,7 +173,6 @@ class MixedStandFitter:
                 start[i+1] = -1
             self.tanoak_factors = tanoak_factors
 
-        # TODO check scaling sensible
         if scale:
             scales = np.amax(inf_data, axis=-1)
             scales = np.mean(scales, axis=0)

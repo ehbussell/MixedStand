@@ -8,7 +8,6 @@ from mixed_stand_model import parameters
 from tests.utils import get_sis_params, sis_analytic, ZERO_PARAMS
 
 # TODO add tests for vaccine decay
-# TODO add tests for control
 
 class TestNonSpatialDynamics(unittest.TestCase):
     """Test accuracy of simulator in non-spatial conditions."""

@@ -9,7 +9,6 @@ from mixed_stand_model import mixed_stand_approx as ms_approx
 from mixed_stand_model import parameters
 from tests.utils import get_sis_params, sis_analytic, ZERO_PARAMS
 
-# TODO add tests of objective calculation
 # TODO add tests for vaccine decay
 
 
