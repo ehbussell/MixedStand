@@ -79,7 +79,7 @@ def observer_factory(pop_size, n_samples):
     return observer
 
 def make_data(n_reps=10, folder=None, append=False):
-    """Generate data analysiing effect of sampling effort."""
+    """Generate data analysing effect of sampling effort."""
 
     if folder is None:
         folder = os.path.join(os.path.realpath(__file__), '..', '..', 'data', 'obs_uncert')
@@ -91,7 +91,7 @@ def make_data(n_reps=10, folder=None, append=False):
 
     # Use population size of 500 as 500m2 per cell
     pop_size = 500
-    sampling_nums = np.array([1, 5, 10, 25, 50, 100, 250, 500])
+    sampling_nums = np.array([1, 2, 3, 5, 7, 10, 15, 25, 35, 50, 70, 100, 150, 250, 350, 500])
 
     with open(os.path.join("data", "scale_and_fit_results.json"), "r") as infile:
         scale_and_fit_results = json.load(infile)
