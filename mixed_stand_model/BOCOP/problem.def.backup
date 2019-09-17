@@ -3,20 +3,20 @@
 
 # Initial and final time :
 time.free string none
-time.initial double 0.0
+time.initial double 15.0
 time.final double 100.0
 
 # Dimensions :
 state.dimension integer 16
-control.dimension integer 7
+control.dimension integer 9
 algebraic.dimension integer 0
-parameter.dimension integer 0
-constant.dimension integer 43
+parameter.dimension integer 153
+constant.dimension integer 50
 boundarycond.dimension integer 16
-constraint.dimension integer 1
+constraint.dimension integer 10
 
 # Discretization :
-discretization.steps integer 200
+discretization.steps integer 170
 discretization.method string gauss
 
 # Optimization :
@@ -29,7 +29,6 @@ batch.upperbound double 0
 batch.directory string none
 
 # Initialization :
-
 initialization.type string from_init_file
 initialization.file string none
 # initialization.type string from_sol_file_cold
@@ -58,13 +57,15 @@ state.12 string Bay_S
 state.13 string Bay_I
 state.14 string Red
 state.15 string Objective
-control.0 string Control_TanSmall_I
-control.1 string Control_TanLarge_I
-control.2 string Control_Bay_I
-control.3 string Control_Bay_S
-control.4 string Control_Red
-control.5 string Protect_TanSmall
-control.6 string Protect_TanLarge
+control.0 string Rogue_TanSmall
+control.1 string Rogue_TanLarge
+control.2 string Rogue_Bay
+control.3 string Thin_TanSmall
+control.4 string Thin_TanLarge
+control.5 string Thin_Bay
+control.6 string Thin_Red
+control.7 string Protect_TanSmall
+control.8 string Protect_TanLarge
 boundarycond.0 string init_Tan1_S
 boundarycond.1 string init_Tan1_I
 boundarycond.2 string init_Tan1_V
@@ -118,17 +119,23 @@ constant.32 string age_trans_3
 constant.33 string recov_tan
 constant.34 string recov_bay
 constant.35 string primary_inf
-constant.36 string max_control_rate
-constant.37 string treat_eff
-constant.38 string div_cost
-constant.39 string cull_cost
-constant.40 string protect_cost
-constant.41 string discount_rate
-constant.42 string payoff_factor
+constant.36 string rogue_rate
+constant.37 string thin_rate
+constant.38 string protect_rate
+constant.39 string treat_eff
+constant.40 string div_cost
+constant.41 string control_cost
+constant.42 string rogue_cost
+constant.43 string thin_cost
+constant.44 string rel_small_cost
+constant.45 string protect_cost
+constant.46 string discount_rate
+constant.47 string payoff_factor
+constant.48 string n_stages
+constant.49 string vaccine_decay
 
 # Solution file :
 solution.file string problem.sol
 
 # Iteration output frequency :
 iteration.output.frequency integer 0
-
