@@ -7,6 +7,7 @@ import logging
 import os
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.gridspec as gridspec
 from scipy.interpolate import interp1d
 from mixed_stand_model import mixed_stand_simulator as ms_sim
 from mixed_stand_model import mixed_stand_approx as ms_approx
@@ -61,7 +62,7 @@ def make_plots(data_folder=None, fig_folder=None):
         logging.info("Diversity cost: %f", div_cost)
         approx_model.load_optimisation(os.path.join(
             data_folder, "div_cost_" + str(div_prop) + "_OL.pkl"))
-        
+
         control = approx_model.optimisation['control']
         control_policy = interp1d(setup['times'][:-1], control, kind="zero",
                                   fill_value="extrapolate")
@@ -136,18 +137,19 @@ def make_plots(data_folder=None, fig_folder=None):
     colors = visualisation.CONTROL_COLOURS
 
     fig = plt.figure()
-    ax = fig.add_subplot(111)
-    ax2 = ax.twinx()
+    gs = gridspec.GridSpec(3, 2, width_ratios=[2, 1], height_ratios=[0.2, 3, 1], top=0.95, left=0.1,
+                           wspace=0.3, bottom=0.3)
+    ax = fig.add_subplot(gs[:, 0])
+    ax2 = fig.add_subplot(gs[1, 1])
 
     color = 'tab:red'
-    ax2.set_ylabel('Large healthy tanoak', color=color)
+    ax2.set_ylabel('Large healthy tanoak')
     ax2.plot(div_props, objectives_ol, '--', color=color, label='OL tanoak objective')
-    ax2.tick_params(axis='y', labelcolor=color)
 
     bars = []
 
     for i in range(9):
-        b = ax.bar(div_props-0.01, control_abs_ol[:, i],
+        b = ax.bar(div_props-0.015, control_abs_ol[:, i],
                    bottom=np.sum(control_abs_ol[:, :i], axis=1), color=colors[i], width=0.015,
                    alpha=0.75)
         bars.append(b)
@@ -157,20 +159,36 @@ def make_plots(data_folder=None, fig_folder=None):
     bars = []
 
     for i in range(9):
-        b = ax.bar(div_props+0.01, control_abs_mpc[:, i],
+        b = ax.bar(div_props+0.015, control_abs_mpc[:, i],
                    bottom=np.sum(control_abs_mpc[:, :i], axis=1), color=colors[i], width=0.015,
                    alpha=0.75)
         bars.append(b)
 
-    ax.legend(bars, labels, bbox_to_anchor=(0.5, -0.15), loc="upper center", ncol=3, frameon=True)
-    ax2.legend(ncol=1, loc='upper center')
-    ax.set_xlabel("Diversity cost")
+    ax.legend(bars, labels, bbox_to_anchor=(-0.1, -0.15), loc="upper left", ncol=3, frameon=True)
+    ax2.legend(bbox_to_anchor=(0.5, -0.3), loc="upper center", ncol=1, frameon=True, fontsize=8)
+    ax.set_xlabel("Diversity benefit")
     ax.set_ylabel("Expenditure")
-    ax.set_title('Left: OL, right: MPC', fontsize=8)
+    ax2.set_xlabel("Diversity benefit")
 
-    ax.set_ylim([0, 14])
-    # ax2.set_ylim([-1.6, -0.1])
-    fig.tight_layout()
+    x_ticks = np.array([0.0, 0.25, 0.5, 0.75, 1.0])
+    offset = 0.025
+    ax.set_xticks(x_ticks)
+    ax2.set_xticks(x_ticks)
+    ax.tick_params(axis='x', direction='out', pad=7, length=5, color='darkgray')
+    ax2.tick_params(axis='x', direction='out', pad=7, length=5, color='darkgray')
+
+    data_to_axis = ax.transData + ax.transAxes.inverted()
+    for x_tick in x_ticks:
+        ax.text(data_to_axis.transform((x_tick-offset, 0))[0], -0.025, 'OL', ha='center',
+                transform=ax.transAxes, fontsize=5)
+        ax.text(data_to_axis.transform((x_tick+(offset/2), 0))[0], -0.025, 'MPC', ha='left',
+                transform=ax.transAxes, fontsize=5)
+
+
+    ax.set_ylim([0, 15])
+    fig.text(0.01, 0.95, "(a)", transform=fig.transFigure, fontsize=11, fontweight="semibold")
+    fig.text(0.57, 0.95, "(b)", transform=fig.transFigure, fontsize=11, fontweight="semibold")
+
     fig.savefig(os.path.join(fig_folder, "DivCostScan.pdf"), dpi=300)
 
 def make_data(folder=None):
