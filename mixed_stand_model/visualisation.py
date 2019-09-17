@@ -7,7 +7,7 @@ from scipy.interpolate import interp1d
 from . import utils
 
 
-CONTROL_COLOURS = ['#637939', '#b5cf6b', '#74c476', '#c7e9c0', '#e6550d', '#fd8d3c', '#fdae6b',
+CONTROL_COLOURS = ['#637939', '#b5cf6b', '#74c476', '#c7e9c0', '#f03b20', '#feb24c', '#ffeda0',
                    '#756bb1', '#bcbddc']
 
 def plot_hosts(times, model_run, ax=None, combine_ages=True, proportions=True, **kwargs):
@@ -85,7 +85,8 @@ def plot_dpcs(times, model_run, ax=None, combine_ages=True, proportions=True, **
 
     if combine_ages:
         states = [tan1+tan2, tan3+tan4, bay]
-        colours = [cmap(cmap_min+x*(cmap_max-cmap_min)) for x in [0.125, 0.625, 1.0]]
+        colours = [cmap(cmap_min+x*(cmap_max-cmap_min)) for x in [0.125, 0.625]]
+        colours.append('purple')
         names = ["Small Tanoak", "Large Tanoak", "Bay"]
     else:
         states = [tan1, tan2, tan3, tan4, bay]
